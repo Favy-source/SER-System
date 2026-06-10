@@ -1,0 +1,83 @@
+data:
+  ravdess_path: "datasets/RAVDESS"
+  cremad_path: "datasets/CREMA-D"
+  msp_improv_path: "datasets/MSP-IMPROV"
+  processed_path: "datasets/processed"
+
+audio:
+  sample_rate: 22050
+  duration: 3.0
+  n_mfcc: 40
+  n_mels: 128
+  n_fft: 2048
+  hop_length: 512
+  f_min: 20.0
+  f_max: 8000.0
+  use_delta: true
+  normalize: true
+
+visual:
+  max_frames: 75
+  frame_size: [112, 112]
+  normalize: true
+
+emotions:
+  unified: ["neutral", "happy", "sad", "angry", "fearful", "disgust"]
+  ravdess_map:
+    "01": "neutral"
+    "02": "neutral"   # calm -> neutral
+    "03": "happy"
+    "04": "sad"
+    "05": "angry"
+    "06": "fearful"
+    "07": "disgust"
+    "08": null        # surprised — dropped (not in unified set)
+  cremad_map:
+    "ANG": "angry"
+    "DIS": "disgust"
+    "FEA": "fearful"
+    "HAP": "happy"
+    "NEU": "neutral"
+    "SAD": "sad"
+  msp_improv_map:
+    "A": "angry"
+    "H": "happy"
+    "S": "sad"
+    "N": "neutral"
+
+model:
+  audio_cnn:
+    channels: [32, 64, 128, 256]
+    dropout: 0.3
+  audio_cnn_lstm:
+    cnn_channels: [32, 64, 128]
+    lstm_hidden: 256
+    lstm_layers: 2
+    dropout: 0.3
+  visual_lstm:
+    hidden_dim: 256
+    num_layers: 2
+    dropout: 0.3
+  fusion:
+    strategy: "attention"
+    n_heads: 8
+    dropout: 0.3
+
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  scheduler: "cosine"
+  early_stopping_patience: 15
+  val_split: 0.15
+  test_split: 0.15
+  seed: 42
+  num_workers: 4
+  pin_memory: true
+  amp: true
+
+output:
+  model_dir: "models"
+  log_dir: "runs"
+  results_dir: "results"

@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.env
+.venv
+venv/
+dist/
+build/
+
+# Data and models
+datasets/processed/
+datasets/RAVDESS/
+datasets/CREMA-D/
+datasets/MSP-IMPROV/
+models/*.pt
+runs/
+results/
+
+# Notebooks
+notebooks/.ipynb_checkpoints/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
