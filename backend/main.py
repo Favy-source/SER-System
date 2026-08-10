@@ -42,6 +42,31 @@ TAG_LANDMARKS = 1
 TAG_HEADER    = 4          # 1 tag byte + 3 reserved, so float32 stays 4-aligned
 
 
+def websocket_support() -> bool:
+    """Is a WebSocket implementation available to the ASGI server?
+
+    uvicorn needs `websockets` or `wsproto` to accept an upgrade. Without one it
+    answers every WS route with **404**, which looks exactly like a routing bug
+    and is nothing of the sort. requirements.txt asks for uvicorn[standard],
+    but a partial install (plain `pip install uvicorn`) silently loses it — and
+    Starlette's TestClient does not use uvicorn's WS implementation at all, so
+    the entire test suite passes while live streaming is dead.
+
+    Reported by /health so the front end can say something accurate instead of
+    "cannot reach backend".
+    """
+    try:
+        import websockets  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    try:
+        import wsproto  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Global engine — loaded once at startup, swappable at runtime
 # ---------------------------------------------------------------------------
@@ -70,6 +95,12 @@ def _load_engine(ckpt_path: str, cfg_path: str) -> InferenceEngine | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global engine
+    if not websocket_support():
+        print("[SER] " + "!" * 66)
+        print("[SER] No WebSocket library installed — /ws/stream will return 404 and")
+        print("[SER] ALL live streaming (voice AND webcam) will fail. File upload still works.")
+        print("[SER] Fix:  pip install 'uvicorn[standard]'   (or: pip install websockets)")
+        print("[SER] " + "!" * 66)
     ckpt = os.getenv("MODEL_CHECKPOINT", "models/audio_cnn_lstm_best.pt")
     cfg  = os.getenv("CONFIG_PATH",      "config/settings.yaml")
     engine = _load_engine(ckpt, cfg)
@@ -122,6 +153,7 @@ def health():
         sample_rate=engine.sr if engine else 0,
         untrained=bool(getattr(engine, "untrained", False)) if engine else False,
         multimodal=bool(getattr(engine, "multimodal", False)) if engine else False,
+        websocket_available=websocket_support(),
     )
 
 

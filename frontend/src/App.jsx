@@ -13,7 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 export default function App() {
   const {
     status, prediction, history, error, visualEnabled,
-    start, stop, reset, sendLandmarks,
+    start, stop, reset, sendLandmarks, setWsSupported,
   } = useStream();
 
   const face     = useFaceTracking();
@@ -30,11 +30,12 @@ export default function App() {
     const check = () =>
       fetch(`${API_URL}/health`)
         .then(r => r.json())
-        .then(setHealth)
+        .then(h => { setHealth(h); setWsSupported(h.websocket_available); })
         .catch(() => setHealth({ status: 'offline', model_loaded: false }));
     check();
     const id = setInterval(check, 10_000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const streaming = status === 'streaming' || status === 'connecting';
@@ -86,6 +87,14 @@ export default function App() {
   return (
     <div className="app">
       <Header health={health} status={status} />
+
+      {health?.model_loaded && health?.websocket_available === false && (
+        <div className="warn-banner">
+          <strong>Live streaming unavailable.</strong> The server has no WebSocket library, so
+          <code>/ws/stream</code> returns 404 — microphone and webcam streaming will both fail.
+          File upload still works. Fix with <code>pip install 'uvicorn[standard]'</code>.
+        </div>
+      )}
 
       {health?.untrained && (
         <div className="warn-banner">

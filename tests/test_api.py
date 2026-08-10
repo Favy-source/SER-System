@@ -503,3 +503,31 @@ def test_health_reports_untrained_true_for_demo_checkpoint():
 
 def test_health_reports_multimodal_flag(client_mm):
     assert client_mm.get("/health").json()["multimodal"] is True
+
+
+# ── WebSocket runtime dependency ───────────────────────────
+
+
+def test_websocket_library_is_installed():
+    """The environment must actually be able to serve WebSockets.
+
+    Starlette's TestClient speaks ASGI in-process and never touches uvicorn's
+    WebSocket implementation, so every other WS test in this file passes even
+    when the deployed server cannot accept a single upgrade — it answers 404
+    instead. That gap hid a total failure of live streaming (voice AND webcam)
+    behind a fully green suite.
+
+    requirements.txt asks for uvicorn[standard], which brings `websockets`. If
+    this fails, the install is incomplete:  pip install 'uvicorn[standard]'
+    """
+    from backend.main import websocket_support
+    assert websocket_support(), (
+        "No websockets/wsproto installed — uvicorn will return 404 for /ws/stream "
+        "and all live streaming will fail. Run: pip install 'uvicorn[standard]'"
+    )
+
+
+def test_health_reports_websocket_availability(client_m):
+    data = client_m.get("/health").json()
+    assert "websocket_available" in data
+    assert isinstance(data["websocket_available"], bool)

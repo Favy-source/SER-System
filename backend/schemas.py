@@ -30,6 +30,11 @@ class HealthResponse(BaseModel):
     untrained: bool = False
     multimodal: bool = False
 
+    # False when uvicorn has no websockets/wsproto, in which case /ws/stream
+    # answers 404 and all live streaming fails while file upload still works.
+    # The front end uses this to explain the failure accurately.
+    websocket_available: bool = True
+
 
 class StreamMessage(BaseModel):
     type: str   # "prediction" | "error" | "info" | "ready"

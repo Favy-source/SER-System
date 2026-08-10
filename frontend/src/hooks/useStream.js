@@ -55,6 +55,12 @@ export function useStream() {
     ws.send(tagFrame(TAG_LANDMARKS, flat.buffer));
   }, []);
 
+  // Set from /health. When the server has no websockets/wsproto, /ws/stream
+  // answers 404 — which surfaces as a generic connection failure and reads like
+  // an unreachable backend. It is not; it is a missing dependency.
+  const wsSupportRef = useRef(true);
+  const setWsSupported = useCallback((ok) => { wsSupportRef.current = ok !== false; }, []);
+
   const start = useCallback(async ({ visual = false } = {}) => {
     setStatus('connecting');
     setError(null);
@@ -143,7 +149,10 @@ export function useStream() {
       };
 
       ws.onerror = () => {
-        setError('Cannot reach backend. Is it running on port 8000?');
+        setError(wsSupportRef.current
+          ? 'Cannot reach backend. Is it running on port 8000?'
+          : "Server has no WebSocket support, so live streaming is unavailable "
+            + "(file upload still works). Fix: pip install 'uvicorn[standard]'");
         setStatus('error');
         _cleanup();
       };
@@ -178,5 +187,6 @@ export function useStream() {
     setError(null);
   }, []);
 
-  return { status, prediction, history, error, visualEnabled, start, stop, reset, sendLandmarks };
+  return { status, prediction, history, error, visualEnabled,
+           start, stop, reset, sendLandmarks, setWsSupported };
 }
