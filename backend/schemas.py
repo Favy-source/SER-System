@@ -24,6 +24,12 @@ class HealthResponse(BaseModel):
     device: str
     sample_rate: int
 
+    # True when the loaded checkpoint has randomly initialised weights
+    # (scripts/make_demo_checkpoint.py). Predictions are noise; the UI shows a
+    # standing warning so a demo cannot be mistaken for a result.
+    untrained: bool = False
+    multimodal: bool = False
+
 
 class StreamMessage(BaseModel):
     type: str   # "prediction" | "error" | "info" | "ready"

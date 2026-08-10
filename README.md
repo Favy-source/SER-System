@@ -32,6 +32,7 @@ measured gap between the current models and MCU budgets.
 - [Repository layout](#repository-layout)
 - [Quick start](#quick-start)
 - [Webcam mode](#webcam-mode)
+- [Try it without training](#try-it-without-training)
 - [End-to-end walkthrough](#end-to-end-walkthrough)
 - [Emotion taxonomy](#emotion-taxonomy)
 - [Datasets](#datasets)
@@ -98,13 +99,13 @@ run on real data:
 | 6 model architectures | ✅ Implemented, tested | Forward shape, gradient flow, determinism |
 | Training harness | ✅ Implemented | Never executed on real data |
 | Evaluation harness | ✅ Implemented | Never executed on real data |
-| FastAPI backend | ✅ Implemented, tested | 20 tests, engine mocked |
+| FastAPI backend | ✅ Implemented, tested | 37 tests; mocked engine plus real-checkpoint e2e |
 | React front end | ✅ Implemented | Audio + webcam landmarks; verified rendering headlessly, no JS unit tests |
-| **Trained checkpoints** | ❌ None | [`models/`](models/) is empty |
+| **Trained checkpoints** | ❌ None | only untrained demo files — see [Try it without training](#try-it-without-training) |
 | **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
 | **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
 
-**Test suite: 166 tests, all passing** (`python3 -m pytest`, ~31 s on CPU).
+**Test suite: 169 tests, all passing** (`python3 -m pytest`, ~30 s on CPU).
 
 Because no checkpoint exists, the backend starts in a degraded mode: `/health` reports
 `model_loaded: false` and the prediction endpoints return **503**. This is intentional — the server
@@ -215,7 +216,10 @@ SER-System/
 ├── scripts/                    CLI entry points
 │   ├── preprocess.py           corpora → datasets/processed/*.npy + manifest.csv
 │   ├── train.py                manifest → models/<name>_best.pt
-│   └── evaluate.py             checkpoint → results/*.json + confusion matrix
+│   ├── evaluate.py             checkpoint → results/*.json + confusion matrix
+│   ├── make_demo_checkpoint.py untrained checkpoints, so the system runs pre-training
+│   ├── explain_fusion.py       prints what the three fusion strategies actually do
+│   └── make_presentation.py    generates docs/presentation/SER-System.pptx
 ├── backend/                    FastAPI inference service
 │   ├── main.py                 app, routes, WebSocket handler, lifespan
 │   ├── inference.py            InferenceEngine
@@ -351,6 +355,49 @@ when both fired.
 Setup notes: the vendored assets (~34 MB WASM + 3.6 MB model) live in `frontend/public/mediapipe/` and
 are gitignored. A failed download is non-fatal — face tracking is simply unavailable and the app runs
 audio-only. Full detail in [docs/frontend/video-pipeline.md](docs/frontend/video-pipeline.md).
+
+---
+
+## Try it without training
+
+The pipeline can be exercised before any corpus is downloaded, using **untrained** checkpoints.
+
+```bash
+python3 scripts/make_demo_checkpoint.py                     # writes 6 random-weight checkpoints
+MODEL_CHECKPOINT=models/DEMO_UNTRAINED_attention.pt \
+  uvicorn backend.main:app --port 8000
+
+cd frontend && npm install && npm run dev                    # http://localhost:3000
+```
+
+Everything downstream of "a checkpoint exists" becomes reachable: the API, the WebSocket, the webcam
+landmark path, the fusion forward passes, the whole UI.
+
+> **The predictions are noise.** Random weights produce confident-looking nonsense — measured on the
+> demo checkpoint, probabilities sit between 0.09 and 0.21, i.e. near-uniform. Because a screenshot of
+> that is indistinguishable from a result, every demo checkpoint carries an `untrained` flag that
+> `/health` reports and the UI renders as a standing amber banner. Do not remove it to make a demo
+> look cleaner.
+
+Measured on this machine (CPU, `attention`, 11.9M params): first prediction **4,734 ms**, subsequent
+**178–227 ms**. The first call pays a one-time lazy `import librosa`.
+
+### Understand the fusion strategies
+
+```bash
+python3 scripts/explain_fusion.py
+```
+
+Walks the real tensors and prints, per strategy: where the two streams meet, the isolated fusion
+parameter cost (527,878 / **2** / 2,367,238), a measured sensitivity check that each strategy actually
+responds to the visual input, what decision-level's two learnable weights mean, and the honest caveat
+that cross-modal attention operates on sequences of length 1.
+
+### Slides
+
+[`docs/presentation/SER-System.pptx`](docs/presentation/SER-System.pptx) — 23 slides, 16:9. Regenerate
+with `python3 scripts/make_presentation.py` (needs `pip install python-pptx`). Parameter counts and
+tensor shapes are computed from the live code, so the deck cannot drift from the repo.
 
 ---
 
@@ -703,7 +750,7 @@ Key-by-key reference: [docs/configuration.md](docs/configuration.md).
 ## Testing
 
 ```bash
-python3 -m pytest                      # all 166
+python3 -m pytest                      # all 169
 python3 -m pytest tests/test_model.py  # one module
 python3 -m pytest -k websocket         # by name
 ```

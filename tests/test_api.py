@@ -43,6 +43,7 @@ def _make_engine(model_name="audio_cnn_lstm", multimodal=False):
     eng.device     = "cpu"
     eng.sr         = 22050
     eng.multimodal = multimodal
+    eng.untrained  = False
     eng.cfg        = {"visual": {"max_frames": MAX_FRAMES}}
     pred = {**MOCK_PRED, "model_name": model_name}
     eng.predict.return_value            = pred
@@ -474,3 +475,31 @@ def test_ws_extra_landmarks_accepted(client_mm):
         msg = ws.receive_json()
     assert msg["type"] == "info"
     assert msg["payload"]["visual"]["frames_received"] == 1
+
+
+# ── Untrained-checkpoint disclosure ───────────────────────
+
+
+def test_health_reports_untrained_false_for_normal_model(client_m):
+    assert client_m.get("/health").json()["untrained"] is False
+
+
+def test_health_reports_untrained_true_for_demo_checkpoint():
+    """A randomly initialised checkpoint must announce itself.
+
+    scripts/make_demo_checkpoint.py exists so the pipeline is runnable before
+    training, but its predictions are noise. If the UI could not tell, a demo
+    screenshot would be indistinguishable from a result.
+    """
+    from unittest.mock import patch
+    from backend.main import app
+    eng = _make_engine()
+    eng.untrained = True
+    with patch("backend.main._load_engine", return_value=eng):
+        with TestClient(app) as c:
+            data = c.get("/health").json()
+    assert data["untrained"] is True
+
+
+def test_health_reports_multimodal_flag(client_mm):
+    assert client_mm.get("/health").json()["multimodal"] is True

@@ -40,6 +40,11 @@ class InferenceEngine:
         self.model_name = ckpt["model_name"]
         self.feature     = ckpt.get("feature", "mel")
         self.multimodal  = is_multimodal(self.model_name)
+        # Written by scripts/make_demo_checkpoint.py. Randomly initialised
+        # weights produce confident-looking nonsense, which is actively
+        # misleading in a demo or a screenshot, so it propagates to /health and
+        # the UI rather than being silently indistinguishable from a real model.
+        self.untrained   = bool(ckpt.get("untrained", False))
 
         # Architecture comes from the checkpoint's own config, and the feature
         # type it was trained on, so the LSTM width matches the state dict.

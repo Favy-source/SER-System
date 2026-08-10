@@ -413,3 +413,21 @@ body {
     transition-duration: .01ms !important;
   }
 }
+
+/* ── Untrained-model warning ────────────────────────────── */
+.warn-banner {
+  background: rgba(251, 191, 36, .10);
+  border: 1px solid rgba(251, 191, 36, .35);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--warning);
+}
+.warn-banner strong { color: var(--warning); }
+.warn-banner code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, .25);
+}

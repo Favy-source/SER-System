@@ -87,6 +87,14 @@ export default function App() {
     <div className="app">
       <Header health={health} status={status} />
 
+      {health?.untrained && (
+        <div className="warn-banner">
+          <strong>Untrained model.</strong> These weights are randomly initialised, so every
+          prediction below is noise — useful for seeing the pipeline run, meaningless as a result.
+          Train a model with <code>scripts/train.py</code> for real output.
+        </div>
+      )}
+
       {banner && (
         <div className="error-banner" onClick={() => setUploadError(null)}>⚠ {banner}</div>
       )}

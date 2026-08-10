@@ -56,6 +56,11 @@ def _load_engine(ckpt_path: str, cfg_path: str) -> InferenceEngine | None:
     try:
         eng = InferenceEngine(ckpt_path, cfg_path)
         print(f"[SER] Loaded {eng.model_name!r} on {eng.device}")
+        if eng.untrained:
+            print("[SER] " + "!" * 62)
+            print("[SER] UNTRAINED CHECKPOINT — weights are random, predictions are NOISE.")
+            print("[SER] Fine for exercising the pipeline; meaningless as a result.")
+            print("[SER] " + "!" * 62)
         return eng
     except Exception as exc:
         print(f"[SER] Failed to load checkpoint: {exc}")
@@ -115,6 +120,8 @@ def health():
         model_name=engine.model_name if engine else None,
         device=str(engine.device) if engine else "n/a",
         sample_rate=engine.sr if engine else 0,
+        untrained=bool(getattr(engine, "untrained", False)) if engine else False,
+        multimodal=bool(getattr(engine, "multimodal", False)) if engine else False,
     )
 
 
