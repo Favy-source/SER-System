@@ -226,6 +226,25 @@ def sheet_protocol(wb):
         r = kv(ws, r, trap, f"{why}\nGUARD: {guard}")
     r += 1
 
+    r = band(ws, r, "PROTOCOL AMENDMENTS — every change, with its trigger")
+    r = kv(ws, r, "Why this section exists",
+           "Kitchenham & Charters require the protocol to be piloted and any change "
+           "recorded. An unlogged edit to a search string cannot be distinguished from "
+           "fitting the protocol to a corpus you have already seen. Each amendment "
+           "below was triggered by an automated calibration test that runs BEFORE any "
+           "screening decision, not by reading results.")
+    if not P.AMENDMENTS:
+        r = kv(ws, r, "(none)", "The protocol has not been amended since it was locked.")
+    for a in P.AMENDMENTS:
+        r = kv(ws, r, f"{a['id']} — {a['target']}",
+               f"DATE: {a['date']}  ({a['stage']})\n"
+               f"TRIGGER: {a['trigger']}\n"
+               f"CAUSE: {a['cause']}\n"
+               f"CHANGE: {a['change']}\n"
+               f"RATIONALE: {a['rationale']}\n"
+               f"EFFECT ON PRIOR WORK: {a['effect_on_prior_work']}")
+    r += 1
+
     r = band(ws, r, "WORKFLOW — Kitchenham's three phases")
     for phase, step, text in P.WORKFLOW:
         r = kv(ws, r, f"{phase}  {step}", text)

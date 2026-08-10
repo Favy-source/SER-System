@@ -1,0 +1,129 @@
+{
+  "generated": "2026-08-11",
+  "protocol_version": "2.0",
+  "window": [
+    2015,
+    2026
+  ],
+  "identification": {
+    "records_from_databases": 1193,
+    "records_from_other_methods": 949,
+    "total_identified": 2142,
+    "duplicates_removed": 385,
+    "records_after_deduplication": 1757
+  },
+  "automated_screening": {
+    "auto_excluded_total": 29,
+    "auto_excluded_by_criterion": {
+      "IC5": 10,
+      "EC3": 18,
+      "EC5": 1
+    },
+    "records_awaiting_manual_screening": 1728,
+    "note": "Automated screening applies MECHANICAL criteria only (IC2 year, IC5 language, EC3 non-human/synthesis, EC5 non-archival, and the protocol Boolean predicate). No record is auto-included; IC3, IC4, EC1 and EC2 require the reviewer's judgement."
+  },
+  "reviewable_corpus": {
+    "by_search_string": {
+      "S1": 242,
+      "S2": 261,
+      "S3": 55,
+      "S4": 235,
+      "S5": 49,
+      "S6": 18,
+      "S8": 270,
+      "S9": 208
+    },
+    "by_year": {
+      "2015": 33,
+      "2016": 34,
+      "2017": 40,
+      "2018": 66,
+      "2019": 60,
+      "2020": 87,
+      "2021": 147,
+      "2022": 202,
+      "2023": 195,
+      "2024": 222,
+      "2025": 387,
+      "2026": 255
+    },
+    "stratified": {
+      "2015_2019": 233,
+      "2020_2026": 1495
+    },
+    "flags": {
+      "venue_type_unknown": 410,
+      "language_unreported": 163,
+      "no_string_match_found_via_citation": 668,
+      "preprint_only": 101,
+      "non_human_terms_in_abstract": 207,
+      "access_unknown": 481,
+      "abstract_missing": 229,
+      "synthesis_terms_present": 6
+    }
+  },
+  "threats_evidence": {
+    "screened_on_title_only": 229,
+    "language_unreported": 163,
+    "access_unknown": 481,
+    "preprint_only": 101,
+    "single_reviewer": true,
+    "note": "These figures populate the Threats to Validity sheet with measured numbers rather than generic statements."
+  },
+  "cache": {
+    "entries": 351,
+    "bytes": 50066621
+  },
+  "snowball_seeds": {
+    "10.1609/aaai.v34i02.5492": {
+      "label": "M3ER (Mittal et al., AAAI 2020) \u2014 teaching example",
+      "doi": "10.1609/aaai.v34i02.5492",
+      "resolved": true,
+      "openalex_records": 2,
+      "forward": 260,
+      "backward": 9,
+      "cited_by_count": 256,
+      "title": "M3ER: Multiplicative Multimodal Emotion Recognition using Facial, Textual, and Speech Cues"
+    },
+    "10.18653/v1/P19-1656": {
+      "label": "MulT (Tsai et al., ACL 2019) \u2014 responder to GAP A",
+      "doi": "10.18653/v1/P19-1656",
+      "resolved": true,
+      "openalex_records": 1,
+      "forward": 137,
+      "backward": 17,
+      "cited_by_count": 137,
+      "title": "Multimodal Transformer for Unaligned Multimodal Language Sequences"
+    },
+    "10.3390/s23125475": {
+      "label": "Mamieva et al. 2023 \u2014 attention fusion, speech+face",
+      "doi": "10.3390/s23125475",
+      "resolved": true,
+      "openalex_records": 1,
+      "forward": 112,
+      "backward": 50,
+      "cited_by_count": 112,
+      "title": "Multimodal Emotion Detection via Attention-Based Fusion of Extracted Facial and Speech Features"
+    },
+    "10.3390/s21144913": {
+      "label": "Xie et al. 2021 \u2014 transformer cross-modality fusion",
+      "doi": "10.3390/s21144913",
+      "resolved": true,
+      "openalex_records": 1,
+      "forward": 103,
+      "backward": 31,
+      "cited_by_count": 103,
+      "title": "Robust Multimodal Emotion Recognition from Conversation with Transformer-Based Crossmodality Fusion"
+    },
+    "10.3390/e25101440": {
+      "label": "Lian et al. 2023 \u2014 survey of multimodal ER",
+      "doi": "10.3390/e25101440",
+      "resolved": true,
+      "openalex_records": 1,
+      "forward": 169,
+      "backward": 61,
+      "cited_by_count": 169,
+      "title": "A Survey of Deep Learning-Based Multimodal Emotion Recognition: Speech, Text, and Face"
+    }
+  }
+}

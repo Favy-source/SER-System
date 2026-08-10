@@ -265,7 +265,14 @@ SEARCH_STRINGS = [
         "id": "S1",
         "serves": ["ReQ1", "ReQ2", "ReQ3"],
         "purpose": "Primary string — fusion and performance",
-        "string": '("emotion recognition" OR "affect recognition" OR "sentiment analysis") '
+        # Topic clause widened at the pilot stage — see AMENDMENTS["A1"]. The
+        # original three phrases missed MulT (Tsai et al. 2019), a named primary
+        # responder in the gap analysis, because its abstract says "multimodal
+        # human language" and never "emotion recognition".
+        "string": '("emotion recognition" OR "affect recognition" OR "sentiment analysis" '
+                  'OR "affective computing" OR "emotion classification" '
+                  'OR "emotion detection" OR "emotion prediction" '
+                  'OR "multimodal language" OR "affect detection") '
                   'AND (multimodal OR "multi-modal" OR audiovisual OR "audio-visual") '
                   'AND (fusion OR "cross-modal attention" OR transformer OR "tensor fusion" '
                   'OR "late fusion" OR "early fusion") '
@@ -505,6 +512,51 @@ GAP_CHAIN_COLUMNS = [
 
 
 # ---------------------------------------------------------------------------
+# Protocol amendments
+# ---------------------------------------------------------------------------
+# Kitchenham & Charters require the protocol to be piloted before execution and
+# any change to be RECORDED with its trigger and rationale. An unrecorded change
+# to a search string is indistinguishable from fitting the protocol to a corpus
+# you have already seen, which is the failure a reviewer will look hardest for.
+#
+# Each amendment below was triggered by an automated calibration test, not by
+# reading results — the recall-anchor tests in tests/test_slr_live.py assert that
+# works already cited in the proposal are retrievable by the protocol's own
+# strings. A failure there means the strings are too narrow, and it fires before
+# any screening decision is made.
+
+AMENDMENTS = [
+    {
+        "id": "A1",
+        "date": "2026-08-10",
+        "stage": "pilot, before any screening decision",
+        "target": "S1, topic clause",
+        "trigger": ("Recall anchor failed: MulT (Tsai et al., ACL 2019) — a named "
+                    "primary responder in the gap analysis and an existing "
+                    "reference of the proposal — satisfied clauses 2, 3 and 4 of "
+                    "S1 but failed clause 1."),
+        "cause": ("The topic clause was locked to three exact phrases. MulT's "
+                  "title and abstract describe the task as 'multimodal human "
+                  "language' and never use 'emotion recognition', 'affect "
+                  "recognition' or 'sentiment analysis', despite being evaluated "
+                  "on IEMOCAP and CMU-MOSI."),
+        "change": ("Added the field's other established task names to the S1 topic "
+                   "clause: 'affective computing', 'emotion classification', "
+                   "'emotion detection', 'emotion prediction', 'affect detection', "
+                   "and 'multimodal language'."),
+        "rationale": ("These are synonyms already in use in this literature, not "
+                      "terms reverse-engineered from one paper. Widening a topic "
+                      "clause lowers precision and raises recall; for a review "
+                      "whose central claim is about what the field has NOT done, "
+                      "a false negative is far more damaging than a false "
+                      "positive, because an over-retrieved paper is discarded at "
+                      "screening while a missed one is invisible."),
+        "effect_on_prior_work": "None — no screening had been performed.",
+    },
+]
+
+
+# ---------------------------------------------------------------------------
 # Threats to validity — required by the method, and this review has real ones
 # ---------------------------------------------------------------------------
 
@@ -547,6 +599,27 @@ THREATS = [
      "which matters because step 3 of the gap method depends on them.",
      "Snowballing (D7) supplements automated traversal; a Semantic Scholar key (D6) "
      "would widen coverage further."),
+
+    ("T9", "OpenAlex splits one work across several records",
+     "OpenAlex frequently holds a single paper as separate preprint, conference and "
+     "journal records WITHOUT merging their citation counts, and a DOI resolves to only "
+     "one of them. Measured on M3ER (Mittal et al., AAAI 2020): the AAAI DOI resolves to "
+     "a record with 21 citations, while the same paper also exists as a record with 256. "
+     "Seeding forward-citation traversal from the DOI alone would therefore reach 21 of "
+     "278 citing papers — missing 92% of the responders — and would leave no trace of the "
+     "loss in the output. Any snowballing that starts from a DOI alone is unsound.",
+     "citations.forward() fans out to every OpenAlex record sharing the seed's normalised "
+     "title (openalex.siblings()) and unions their citing sets, de-duplicating by OpenAlex "
+     "ID. The number of records found per seed is reported in prisma.json so the fan-out "
+     "is auditable. Detected by an automated calibration test, not by inspection."),
+
+    ("T10", "Crossref exposes no language field",
+     "`language` is not a selectable Crossref field, so records retrieved from Crossref "
+     "alone carry no language metadata and cannot be screened against IC5 on that basis.",
+     "IC5 language screening EXCLUDES only on an explicit non-English value; absence is "
+     "flagged `language_unreported` and left to manual screening. Crossref records that "
+     "merge with an OpenAlex or PubMed record inherit a language. The count of records "
+     "screened without language metadata is reported in prisma.json."),
 ]
 
 

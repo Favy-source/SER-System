@@ -34,6 +34,10 @@ frontend/public/mediapipe/
 .vscode/
 *.iml
 
+# Local, personal, or unpublished content — never committed
+*.local.md
+slr/cache/
+
 # OS
 .DS_Store
 Thumbs.db
