@@ -154,7 +154,7 @@ python3 -m pytest
 Expected:
 
 ```
-collected 166 items
+collected 171 items
 tests/test_api.py ....................            [ 15%]
 tests/test_datasets.py .................................  [ 41%]
 tests/test_features.py ................            [ 54%]
@@ -280,6 +280,39 @@ No checkpoint. Either train one, or point `MODEL_CHECKPOINT` at an existing `.pt
 `getUserMedia` requires a **secure context**: `https://`, or `http://localhost` (which browsers treat
 as secure). Accessing the dev server via a LAN IP over plain HTTP will fail. Either use `localhost`, or
 put the dev server behind TLS.
+
+### Live streaming fails but file upload works — `/ws/stream` returns 404
+
+**The most likely cause is a missing WebSocket library, not a routing bug.**
+
+uvicorn needs `websockets` or `wsproto` to accept an upgrade. Without one it answers *every* WebSocket
+route with 404, so microphone streaming and webcam landmarks both fail while `POST /predict/audio`
+keeps working perfectly — a confusing split that looks like a code problem.
+
+```
+WARNING:  No supported WebSocket library detected. Please use "pip install 'uvicorn[standard]'"
+```
+
+```bash
+pip install 'uvicorn[standard]'        # or: pip install websockets
+```
+
+`requirements.txt` already asks for this. A partial install (plain `pip install uvicorn`) loses it.
+
+Diagnose it three ways:
+
+```bash
+curl -s localhost:8000/health | grep websocket_available     # false when missing
+python3 -m pytest -k websocket_library                       # fails loudly when missing
+```
+
+and the server prints a boxed warning at startup. The front end also renders a standing amber banner
+naming the fix, rather than the misleading "cannot reach backend".
+
+> **Why the test suite does not catch this on its own.** Starlette's `TestClient` speaks ASGI
+> in-process and never touches uvicorn's WebSocket implementation, so all 37 API tests pass while live
+> streaming is completely dead. `test_websocket_library_is_installed` exists purely to close that gap
+> and will fail until the dependency is present — which is intentional.
 
 ### `Cannot reach backend. Is it running on port 8000?`
 

@@ -76,19 +76,19 @@ engine: InferenceEngine | None = None
 
 def _load_engine(ckpt_path: str, cfg_path: str) -> InferenceEngine | None:
     if not Path(ckpt_path).exists():
-        print(f"[SER] No checkpoint at {ckpt_path!r} — prediction endpoints will return 503")
+        print(f"[SER] No checkpoint at {ckpt_path!r} — prediction endpoints will return 503", flush=True)
         return None
     try:
         eng = InferenceEngine(ckpt_path, cfg_path)
-        print(f"[SER] Loaded {eng.model_name!r} on {eng.device}")
+        print(f"[SER] Loaded {eng.model_name!r} on {eng.device}", flush=True)
         if eng.untrained:
-            print("[SER] " + "!" * 62)
-            print("[SER] UNTRAINED CHECKPOINT — weights are random, predictions are NOISE.")
-            print("[SER] Fine for exercising the pipeline; meaningless as a result.")
-            print("[SER] " + "!" * 62)
+            print("[SER] " + "!" * 62, flush=True)
+            print("[SER] UNTRAINED CHECKPOINT — weights are random, predictions are NOISE.", flush=True)
+            print("[SER] Fine for exercising the pipeline; meaningless as a result.", flush=True)
+            print("[SER] " + "!" * 62, flush=True)
         return eng
     except Exception as exc:
-        print(f"[SER] Failed to load checkpoint: {exc}")
+        print(f"[SER] Failed to load checkpoint: {exc}", flush=True)
         return None
 
 
@@ -96,11 +96,13 @@ def _load_engine(ckpt_path: str, cfg_path: str) -> InferenceEngine | None:
 async def lifespan(app: FastAPI):
     global engine
     if not websocket_support():
-        print("[SER] " + "!" * 66)
-        print("[SER] No WebSocket library installed — /ws/stream will return 404 and")
-        print("[SER] ALL live streaming (voice AND webcam) will fail. File upload still works.")
-        print("[SER] Fix:  pip install 'uvicorn[standard]'   (or: pip install websockets)")
-        print("[SER] " + "!" * 66)
+        # flush=True throughout: uvicorn buffers stdout, so without it these
+        # lines never reach the terminal and the operator sees only a 404.
+        print("[SER] " + "!" * 66, flush=True)
+        print("[SER] No WebSocket library installed — /ws/stream will return 404 and", flush=True)
+        print("[SER] ALL live streaming (voice AND webcam) will fail. File upload still works.", flush=True)
+        print("[SER] Fix:  pip install 'uvicorn[standard]'   (or: pip install websockets)", flush=True)
+        print("[SER] " + "!" * 66, flush=True)
     ckpt = os.getenv("MODEL_CHECKPOINT", "models/audio_cnn_lstm_best.pt")
     cfg  = os.getenv("CONFIG_PATH",      "config/settings.yaml")
     engine = _load_engine(ckpt, cfg)

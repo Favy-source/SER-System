@@ -105,7 +105,7 @@ run on real data:
 | **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
 | **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
 
-**Test suite: 169 tests, all passing** (`python3 -m pytest`, ~30 s on CPU).
+**Test suite: 171 tests, all passing** (`python3 -m pytest`, ~45 s on CPU with a complete install).
 
 Because no checkpoint exists, the backend starts in a degraded mode: `/health` reports
 `model_loaded: false` and the prediction endpoints return **503**. This is intentional — the server
@@ -363,6 +363,7 @@ audio-only. Full detail in [docs/frontend/video-pipeline.md](docs/frontend/video
 The pipeline can be exercised before any corpus is downloaded, using **untrained** checkpoints.
 
 ```bash
+pip install 'uvicorn[standard]'                             # REQUIRED for live streaming (see note)
 python3 scripts/make_demo_checkpoint.py                     # writes 6 random-weight checkpoints
 MODEL_CHECKPOINT=models/DEMO_UNTRAINED_attention.pt \
   uvicorn backend.main:app --port 8000
@@ -379,8 +380,17 @@ landmark path, the fusion forward passes, the whole UI.
 > `/health` reports and the UI renders as a standing amber banner. Do not remove it to make a demo
 > look cleaner.
 
-Measured on this machine (CPU, `attention`, 11.9M params): first prediction **4,734 ms**, subsequent
-**178–227 ms**. The first call pays a one-time lazy `import librosa`.
+> **Live streaming needs `websockets`.** Without it uvicorn answers `/ws/stream` with **404**, so the
+> microphone and webcam both fail while file upload keeps working. `/health` reports
+> `websocket_available: false`, the server prints a boxed warning, the UI shows a banner naming the
+> fix, and `pytest -k websocket_library` fails. See
+> [docs/setup.md](docs/setup.md#live-streaming-fails-but-file-upload-works--wsstream-returns-404).
+
+Measured on this machine (CPU): file upload **4,734 ms** first call then **178–227 ms**; live
+microphone streaming **124–541 ms** per window. The first call pays a one-time lazy `import librosa`.
+
+Verified end to end in a real headless browser with a synthetic microphone: **1,548 audio frames sent,
+19 predictions received, 0 console errors.**
 
 ### Understand the fusion strategies
 
@@ -750,7 +760,7 @@ Key-by-key reference: [docs/configuration.md](docs/configuration.md).
 ## Testing
 
 ```bash
-python3 -m pytest                      # all 169
+python3 -m pytest                      # all 171
 python3 -m pytest tests/test_model.py  # one module
 python3 -m pytest -k websocket         # by name
 ```

@@ -1,6 +1,6 @@
 # Testing
 
-166 tests across five modules, all passing in ~31 s on CPU with no corpora, no checkpoints, and no GPU.
+171 tests across five modules, all passing in ~45 s on CPU with no corpora, no checkpoints, and no GPU.
 
 - [Running the suite](#running-the-suite)
 - [Design principles](#design-principles)
@@ -18,7 +18,7 @@
 ## Running the suite
 
 ```bash
-python3 -m pytest                          # all 166
+python3 -m pytest                          # all 171
 python3 -m pytest tests/test_model.py      # one module
 python3 -m pytest -k websocket             # by name substring
 python3 -m pytest -k "not api"             # exclude
@@ -50,7 +50,7 @@ periodically to see them (that is how the `torch.cuda.amp.GradScaler` deprecatio
 Expected:
 
 ```
-collected 166 items
+collected 171 items
 tests/test_api.py ..................................      [ 20%]
 tests/test_datasets.py .................................   [ 40%]
 tests/test_features.py ................                    [ 50%]
@@ -661,3 +661,34 @@ Two tests pin both halves of the behaviour:
 This is the clearest instance of the general lesson in [Coverage gaps](#coverage-gaps): a mock reproduces
 the interface you imagined, so it cannot falsify an assumption baked into that interface. Only real
 components on both sides of a boundary can.
+
+
+---
+
+## The environment gap: when a green suite hides a dead feature
+
+`test_websocket_library_is_installed` is the only test here that asserts something about the
+*environment* rather than the code, and it exists because of a genuine failure.
+
+A browser test with a fake microphone device showed `/ws/stream` returning **404**. Not a routing bug:
+uvicorn had no `websockets` or `wsproto` installed, so it refused every upgrade. **All live streaming —
+voice and webcam — was dead, while 169 tests passed and `POST /predict/audio` worked perfectly.**
+
+The suite could not see it because Starlette's `TestClient` speaks ASGI in-process and never uses
+uvicorn's WebSocket implementation at all. Every one of the 20-odd WS protocol tests exercised a
+transport the deployment does not use.
+
+This is the same shape as the two other bugs this file records:
+
+| bug | what the test harness substituted | what it therefore could not see |
+|---|---|---|
+| MFCC channel dim | tests built their own tensors | the Dataset→model contract |
+| Landmark width | synthetic `zeros(75, 1404)` | what MediaPipe actually returns |
+| Visual staleness | a mocked engine with no latency | that our own compute aged the track |
+| **WS 404** | **in-process ASGI transport** | **that the server cannot accept an upgrade** |
+
+The general rule: **a mock reproduces the interface you imagined, so it cannot falsify an assumption
+baked into that interface.** Only real components on both sides of a boundary can.
+
+The test asserts hard rather than skipping. A skip would restore exactly the invisibility that caused
+the problem, and the fix is one `pip install`.
