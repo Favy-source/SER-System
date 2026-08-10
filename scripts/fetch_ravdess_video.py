@@ -80,16 +80,38 @@ def human(n):
     return f"{n/1024/1024:.0f} MB" if n < 1024**3 else f"{n/1024**3:.2f} GB"
 
 
-def download(actor, dest: Path, cache=None):
+def download(actor, dest: Path, cache=None, attempts=5):
+    """Fetch one actor archive, retrying transient network failures.
+
+    curl's --retry does NOT cover DNS failures (exit 6) unless
+    --retry-all-errors is given. Without it a brief resolver outage returns
+    immediately, and the caller marches through every remaining actor in
+    seconds — which is exactly what happened on the first full run: 22 actors
+    "processed" in under a minute, all silently skipped, and the script exited
+    reporting success.
+
+    So: --retry-all-errors, plus an outer backoff loop, plus `-C -` so a partial
+    file resumes instead of restarting 528 MB.
+    """
     if cache and Path(cache).exists():
         print(f"    reusing cached zip: {cache}")
         shutil.copy(cache, dest)
         return dest
+
     url = URL.format(a=actor)
-    # curl rather than urllib: resumes, and reports nothing to stdout so the
-    # per-actor log stays readable.
-    subprocess.run(["curl", "-sL", "--retry", "3", "-o", str(dest), url], check=True)
-    return dest
+    cmd = ["curl", "-sL", "-C", "-",
+           "--retry", "5", "--retry-delay", "5", "--retry-all-errors",
+           "--connect-timeout", "30", "--speed-time", "120", "--speed-limit", "1024",
+           "-o", str(dest), url]
+    for attempt in range(1, attempts + 1):
+        r = subprocess.run(cmd)
+        if r.returncode == 0 and dest.exists() and dest.stat().st_size > 100 * 1024 * 1024:
+            return dest
+        wait = min(60 * attempt, 300)
+        print(f"    attempt {attempt}/{attempts} failed (curl exit {r.returncode}); "
+              f"retrying in {wait}s")
+        time.sleep(wait)
+    raise RuntimeError(f"download failed after {attempts} attempts (curl exit {r.returncode})")
 
 
 def main():
@@ -121,6 +143,7 @@ def main():
 
     t_start = time.time()
     total_new = total_skip = total_fail = 0
+    consecutive_failures = 0
 
     for actor in actors:
         tag = f"Actor_{actor:02d}"
@@ -138,8 +161,15 @@ def main():
             t0 = time.time()
             try:
                 download(actor, zp, cache=args.cache if actor == actors[0] else None)
-            except subprocess.CalledProcessError as e:
+                consecutive_failures = 0
+            except Exception as e:
+                consecutive_failures += 1
                 print(f"    download FAILED: {e}")
+                if consecutive_failures >= 3:
+                    print(f"\n  ABORTING: {consecutive_failures} consecutive download "
+                          f"failures — the network looks down, not the data.")
+                    print("  Re-run the same command later; completed actors are skipped.")
+                    break
                 continue
             print(f"    downloaded {human(zp.stat().st_size)} in {time.time()-t0:.0f}s")
 
@@ -207,8 +237,11 @@ def main():
     print(f"{'='*66}")
     if have == 0:
         print("  NOTHING matched — check that video stems use modality 01")
+    elif have < len(manifest):
+        print(f"  INCOMPLETE: {len(manifest) - have} rows still have no landmarks.")
+        print("  Re-run the same command to continue; completed actors are skipped.")
     else:
-        print("  next: scripts/train.py --model decision_level")
+        print("  COMPLETE — next: scripts/train.py --model decision_level")
 
 
 if __name__ == "__main__":
