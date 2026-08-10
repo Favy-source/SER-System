@@ -167,7 +167,8 @@ fname, code = parts[0], parts[2]
 label = emotion_map.get(code)
 audio = Path(root) / "Audio" / f"{fname}.wav"
 if not audio.exists(): continue     # skip labels with no audio on disk
-speaker = f"msp_{fname[:6]}"        # ← see known issues
+spk = msp_speaker(fname)            # actor field, not a fixed slice
+speaker = f"msp_{spk}" if spk else "msp_unknown"
 ```
 
 Blank lines and `;`-prefixed comments are skipped. Labelled entries whose audio file is missing are
@@ -332,14 +333,14 @@ def _load_visual(self, video_path):
         p = self.proc / "landmarks" / (Path(video_path).stem + ".npy")
         if p.exists():
             return torch.from_numpy(np.load(p)).float()
-    return torch.zeros(75, 1404)    # zero-fill when video unavailable
+    return torch.zeros(self.max_frames, LANDMARK_DIM)   # zero-fill
 ```
 
 Two things to notice:
 
-- **The channel dimension is added only for `"mel"`.** This is
-  [known issue #1](../README.md#1---feature-mfcc-crashes-the-cnn-models--confirmed) — MFCC tensors
-  arrive at `Conv2d` as 3-D and it raises.
+- **The channel dimension is added for both features.** It used to be added only for `"mel"`, which
+  made MFCC tensors arrive at `Conv2d` as 3-D. Fixed — see
+  [features.md](features.md#fixed-mfcc-tensors-lacked-a-channel-dimension).
 - **Zero-fill is what makes audio-only corpora usable in multimodal training.** MSP-IMPROV has no
   video at all; without the fallback it could not participate. The cost is that a fusion model trained
   on a mixed manifest sees many all-zero visual inputs and may learn to ignore the visual branch
@@ -402,28 +403,54 @@ unmapped labels rather than defaulting them; use `sorted()` for deterministic or
 
 ## Known issues
 
-### MSP-IMPROV speaker ids collapse to one speaker — confirmed by inspection
+### Fixed: MSP-IMPROV speaker ids collapsed to one speaker
 
 ```python
-speaker = f"msp_{fname[:6]}"
+speaker = f"msp_{fname[:6]}"        # the bug
 ```
 
-Real MSP-IMPROV filenames all begin `MSP-IMPROV-…`, so `fname[:6]` is `"MSP-IM"` for **every file in
-the corpus**. All MSP-IMPROV samples become a single split unit and go entirely to train, entirely to
-val, or entirely to test depending on the seed. Speaker independence holds trivially, but the split is
-badly unbalanced and MSP-IMPROV may be absent from training altogether.
+Real MSP-IMPROV filenames all begin `MSP-IMPROV-…`, so `fname[:6]` was `"MSP-IM"` for **every file in
+the corpus**. All ~8,400 samples became a single split unit and went entirely to train, entirely to val,
+or entirely to test depending on the seed. Speaker independence held trivially, but the split was badly
+unbalanced and MSP-IMPROV could be absent from training altogether.
 
-The fix is to parse the real speaker field. In `MSP-IMPROV-S01A-M01-P-FM01`, the `M01` segment is the
-speaker:
+[`msp_speaker`](../src/datasets.py) now scans for the actor field rather than slicing at a fixed offset:
 
 ```python
-segs = fname.split("-")
-speaker = f"msp_{segs[3]}" if len(segs) > 3 else f"msp_unknown"
+_MSP_SPEAKER_RE = re.compile(r"^[MF]\d+$")
+
+def msp_speaker(fname: str) -> Optional[str]:
+    for seg in fname.split("-"):
+        if _MSP_SPEAKER_RE.match(seg):
+            return seg
+    return None
 ```
 
-Verify against your release's naming before relying on the index. The existing test uses the synthetic
-stem `MSP-ABC-01` and does not assert on the speaker value, which is why the bug survives the suite —
-a regression test asserting distinct speakers for distinct actors should be added alongside the fix.
+A scan rather than an index because it is robust to layout variation between releases. The pattern —
+one `M`/`F` followed by digits — matches the actor segment and nothing else in the stem: `MSP` and
+`IMPROV` have no digits, `S01A` starts with `S`, and the trailing take ids `FM01` / `FF01` have two
+letters before their digits.
+
+Two properties worth being explicit about:
+
+- **Over-merging is safe; under-merging is not.** If a release numbered actors per session so that
+  `F01` in session 1 and `F01` in session 4 were different people, this would merge them into one split
+  unit — coarser than ideal, but still leakage-free. Splitting one actor across units would be the
+  dangerous direction, and a scan for the actor field cannot do that.
+- **Unrecognisable stems bucket together** as `msp_unknown` with a logged warning, rather than becoming
+  per-file speakers. Per-file ids would scatter one actor across train and test, which is precisely the
+  leakage the speaker split exists to prevent.
+
+The old fixtures used the synthetic stem `MSP-ABC-01` and never asserted on the speaker value, which is
+why the suite passed over this. [`tests/test_datasets.py`](../tests/test_datasets.py) now tests against
+real-format stems: `test_parse_msp_improv_speakers_are_distinct`,
+`test_msp_speaker_same_actor_across_sessions_is_one_id`,
+`test_parse_msp_improv_unrecognised_stem_buckets_together`, and `test_msp_speakers_survive_the_split`
+— the last of which asserts that distinct actors reach distinct splits, which is the property that
+actually matters.
+
+> Field ordering still varies between releases. Inspect a few stems from your copy and confirm
+> `msp_speaker` returns what you expect before running a full preprocessing pass.
 
 ### RAVDESS song samples are not filtered
 

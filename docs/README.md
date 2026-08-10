@@ -47,7 +47,11 @@ overwhelm it.
 | [models.md](models.md) | All six architectures with layer-by-layer tensor traces |
 | [training.md](training.md) | Training loop, hyperparameters, checkpoint format, monitoring |
 | [evaluation.md](evaluation.md) | Metrics, confusion matrices, latency benchmark methodology |
-| [testing.md](testing.md) | All 87 tests explained, fixtures, how to add more |
+| [testing.md](testing.md) | All 127 tests explained, fixtures, how to add more |
+
+Landmark geometry and the audio feature height are defined once in
+[`src/constants.py`](../src/constants.py) and [`feature_height`](../src/models/builder.py); every
+consumer imports them rather than hard-coding a number.
 
 ### Backend
 
@@ -83,7 +87,14 @@ The pipeline is fully implemented and unit-tested but has **not** been run on re
 checkpoints exist, so no accuracy, F1, or latency results are reported anywhere in these docs. Where
 a page would normally show results, it shows the command that will produce them.
 
-Three known defects sit on code paths that real data has not yet traversed — the MFCC channel
-dimension, the FaceMesh landmark count, and MSP-IMPROV speaker parsing. All three are described in
-[Known issues and limitations](../README.md#known-issues-and-limitations) and repeated in the relevant
-page here. Read those before trusting the visual or MFCC paths.
+Three defects that had been sitting on those untraversed paths — the MFCC channel dimension (and the
+LSTM width that depended on it), the FaceMesh landmark count, and MSP-IMPROV speaker parsing — have
+been fixed, and each is now covered by a test verified to fail without its fix. See
+[Known issues and limitations](../README.md#known-issues-and-limitations) for what changed and what
+remains. The pages here describe the current behaviour; where a fix reshaped an interface, the page
+says what it was and why.
+
+The one path still without end-to-end coverage is visual feature extraction itself: `mediapipe` is
+not installed in the development environment, so `extract_visual_features` has never run against a
+real video. The landmark dimension is now validated at runtime rather than assumed, but the
+extraction remains unexercised.

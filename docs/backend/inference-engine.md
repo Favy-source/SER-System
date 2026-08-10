@@ -184,12 +184,12 @@ if self.feature == "mel":
 # mfcc
 feat = mfcc_features(audio, self.sr, acfg["n_mfcc"], acfg["n_fft"],
                      acfg["hop_length"], acfg["use_delta"], acfg["normalize"])
-return torch.from_numpy(feat).float().unsqueeze(0).to(self.device)   # ← (1, C, T), 3-D
+return torch.from_numpy(feat).float().unsqueeze(0).unsqueeze(0).to(self.device)
 ```
 
-The mel branch double-unsqueezes to `(1, 1, 128, 130)` — batch and channel. The MFCC branch unsqueezes
-once, producing 3-D `(1, 120, 130)`, which `Conv2d` cannot accept. Same defect as the training path; see
-[Known issues](#known-issues).
+Both branches double-unsqueeze to `(batch, channel, freq, time)` — `(1, 1, 128, 130)` for mel,
+`(1, 1, 120, 130)` for MFCC. The MFCC branch used to unsqueeze once, producing 3-D `(1, 120, 130)`,
+which `Conv2d` cannot accept. See [Fixed issues](#fixed-issues).
 
 `mel_spectrogram` and `mfcc_features` are imported from `src.features` — the same functions
 `preprocess.py` calls. This is the single most important line in the file for correctness.
@@ -199,8 +199,12 @@ once, producing 3-D `(1, 120, 130)`, which `Conv2d` cannot accept. Same defect a
 ```python
 def _zero_visual(self):
     vcfg = self.cfg["visual"]
-    return torch.zeros(1, vcfg["max_frames"], 1404, device=self.device)
+    return torch.zeros(1, vcfg["max_frames"], LANDMARK_DIM, device=self.device)
 ```
+
+`LANDMARK_DIM` is imported from [`src/constants.py`](../../src/constants.py) — the same constant
+`VisualLSTM` and `EmotionDataset` use, so the placeholder cannot drift from the model's input width.
+It was previously a literal `1404` here, in `builder.py`, and in `datasets.py`.
 
 There is no video ingestion path in the backend, so any fusion model is served with an all-zero visual
 tensor. **A fusion checkpoint therefore runs effectively audio-only at serve time**, and its evaluation
@@ -327,24 +331,33 @@ config here would be a small, worthwhile fix.
 
 ---
 
+## Fixed issues
+
+### MFCC tensors were 3-D and crashed the CNN models
+
+`_to_tensor`'s mfcc branch applied one `unsqueeze(0)`, producing `(1, 120, 130)`, which `Conv2d` cannot
+accept. The training path had the same defect
+([`EmotionDataset._load_audio`](../../src/datasets.py)), so such a checkpoint could not be produced
+either — the bug was self-consistent, which is why nothing failed loudly.
+
+Both sides now unsqueeze twice. And because `AudioCNNLSTM` sizes its LSTM from the feature's frequency
+height, `build_model` now takes the `feature` argument and `InferenceEngine` passes `self.feature` when
+rebuilding — otherwise an mfcc checkpoint's state dict would not match the model built to receive it.
+
+Covered by `test_inference_engine_mfcc_checkpoint` in
+[`tests/test_integration.py`](../../tests/test_integration.py), which saves a real mfcc checkpoint,
+loads it through `InferenceEngine`, asserts the tensor rank, and predicts.
+
+### The landmark constant was hard-coded here too
+
+`_zero_visual` used a literal `1404`, matching `builder.py` and `datasets.py` — all three assuming
+`FaceMesh(refine_landmarks=True)` yields 468 landmarks when it yields 478. Now derived from
+`LANDMARK_DIM` in [`src/constants.py`](../../src/constants.py). See
+[features.md](../features.md#fixed-the-landmark-width-was-hard-coded-three-times).
+
+---
+
 ## Known issues
-
-### MFCC tensors are 3-D and crash the CNN models — confirmed
-
-`_to_tensor`'s mfcc branch applies one `unsqueeze(0)`, producing `(1, 120, 130)`. `Conv2d` requires 4-D
-(or 3-D unbatched with matching channels), so a checkpoint trained with `feature="mfcc"` cannot be
-served. The same defect exists in the training path
-([`EmotionDataset._load_audio`](../../src/datasets.py#L169)), which means such a checkpoint cannot be
-produced in the first place — the bug is self-consistent, which is why nothing has failed loudly yet.
-
-**Fix:** `.unsqueeze(0).unsqueeze(0)` on the mfcc branch, and unconditional unsqueeze in `_load_audio`.
-
-### The 1404 landmark constant is hard-coded here too
-
-`_zero_visual` uses `1404`, matching `builder.py` and `datasets.py`. All three carry the same assumption
-that `FaceMesh(refine_landmarks=True)` yields 468 landmarks, when it should yield 478 → 1434. See
-[known issue #2](../../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed).
-Define it once as a module constant when fixing.
 
 ### Pad/crop is duplicated
 
@@ -372,7 +385,8 @@ every other connection. `await loop.run_in_executor(None, engine.predict, window
 
 1. Implement the extractor in [`src/features.py`](../../src/features.py).
 2. Add a branch to `_to_tensor` — **with the correct number of unsqueezes for the model's expected
-   rank**, which is exactly what the mfcc branch got wrong.
+   rank**, which is exactly what the mfcc branch got wrong. If the new feature has a different
+   frequency height, extend [`feature_height`](../../src/models/builder.py) too.
 3. Handle it in [`EmotionDataset._load_audio`](../../src/datasets.py#L166) too, so training and serving
    agree.
 4. Add a test that feeds the new feature through a real model forward pass, not just the extractor.

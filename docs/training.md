@@ -29,8 +29,10 @@ python3 scripts/train.py --model audio_cnn_lstm --feature mel
 | `--feature` | `mel` | `mel`, `mfcc` |
 | `--config` | `config/settings.yaml` | any YAML path |
 
-> **Use `--feature mel`.** `--feature mfcc` currently raises a `RuntimeError` on the CNN models — see
-> [known issue #1](../README.md#1---feature-mfcc-crashes-the-cnn-models--confirmed).
+Both feature types work. `--feature mfcc` used to raise a `RuntimeError` on the CNN models; the input
+rank and the LSTM width that depends on the feature height are both fixed, and covered by
+`tests/test_integration.py`. Note that the feature is recorded in the checkpoint and must match at
+serve time — `build_model` needs it to size the LSTM.
 
 Prerequisite: `python3 scripts/preprocess.py` must have produced
 `datasets/processed/manifest.csv` and the corresponding `.npy` files.
@@ -382,7 +384,9 @@ Run `python3 scripts/preprocess.py` first.
 
 ### `RuntimeError: Given groups=1, weight of size [32, 1, 3, 3], expected input[...] to have 1 channels`
 
-`--feature mfcc`. Known bug; use `--feature mel`.
+This was a bug in the MFCC path (missing channel axis, plus an LSTM width derived from `n_mels`
+regardless of feature). Both are fixed. If you still see it, check that your `build_model` call passes
+the `feature` argument — omitting it defaults to `"mel"`.
 
 ### `CUDA out of memory`
 
@@ -399,8 +403,8 @@ rate is not so high that the model diverged in the first epoch.
 
 The model is overfitting from epoch 1, usually because the training split is very small. Check the
 printed split sizes — if MSP-IMPROV collapsed into a single speaker
-([known issue](datasets.md#known-issues)) and that speaker went to train, the effective split may be far
-from 70/15/15.
+(as MSP-IMPROV did before its [speaker parsing was fixed](datasets.md#known-issues)) and that speaker
+went to train, the effective split may be far from 70/15/15.
 
 ### Training extremely slow on GPU
 

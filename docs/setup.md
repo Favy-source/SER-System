@@ -146,12 +146,13 @@ python3 -m pytest
 Expected:
 
 ```
-collected 87 items
-tests/test_api.py ....................          [ 22%]
-tests/test_datasets.py ......................    [ 48%]
-tests/test_features.py ................          [ 66%]
-tests/test_model.py .............................[100%]
-======== 87 passed in 18.75s ========
+collected 127 items
+tests/test_api.py ....................            [ 15%]
+tests/test_datasets.py .................................  [ 41%]
+tests/test_features.py ................            [ 54%]
+tests/test_integration.py .............................   [ 77%]
+tests/test_model.py .............................  [100%]
+======== 127 passed in 32.66s ========
 ```
 
 The suite needs no corpora, no checkpoints, and no GPU — it uses synthetic sine waves and a mocked
@@ -256,9 +257,10 @@ expected structure.
 
 ### `RuntimeError: Given groups=1, weight of size [32, 1, 3, 3], expected input[...] to have 1 channels`
 
-You used `--feature mfcc`. This is a known bug — the MFCC path omits the channel dimension. Use
-`--feature mel` until it is fixed; see
-[known issues](../README.md#1---feature-mfcc-crashes-the-cnn-models--confirmed).
+This was a bug in the MFCC path — a missing channel axis, and an LSTM width derived from `n_mels`
+regardless of the feature in use. Both are fixed; see
+[known issues](../README.md#known-issues-and-limitations). If it recurs, check that `build_model` is
+being passed the `feature` argument.
 
 ### `HTTP 503: Model not loaded`
 

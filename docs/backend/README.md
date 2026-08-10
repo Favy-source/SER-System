@@ -30,6 +30,7 @@ Roughly 465 lines of Python for the entire service. The brevity is possible beca
 logic lives in [`src/`](../../src/), which the backend imports rather than duplicates:
 
 ```python
+from src.constants import LANDMARK_DIM
 from src.datasets import UNIFIED, IDX2LABEL
 from src.features import mel_spectrogram, mfcc_features
 from src.models.builder import build_model, is_multimodal
@@ -314,7 +315,7 @@ the visual branch of any fusion model:
 
 ```python
 def _zero_visual(self):
-    return torch.zeros(1, self.cfg["visual"]["max_frames"], 1404, device=self.device)
+    return torch.zeros(1, self.cfg["visual"]["max_frames"], LANDMARK_DIM, device=self.device)
 ```
 
 Fusion checkpoints load and predict, but their visual half contributes nothing at inference time. **A

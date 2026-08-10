@@ -133,12 +133,15 @@ visual:
 | `frame_size` | `[112, 112]` | Frames resized before FaceMesh. Smaller is faster; too small hurts landmark accuracy |
 | `normalize` | true | Read from config but **not currently used** — `extract_visual_features` always normalises (centroid subtraction + max-radius scaling) |
 
-> **Caveat.** [`EmotionDataset._load_visual`](../src/datasets.py#L178) hard-codes
-> `torch.zeros(75, 1404)` for missing video instead of reading `max_frames`. Change `max_frames` and
-> samples without video will produce a mismatched tensor, breaking batch collation. Fix both together.
+`max_frames` is honoured throughout: `EmotionDataset` takes it as a constructor argument and
+`train.py` / `evaluate.py` pass `cfg["visual"]["max_frames"]`. It used to be hard-coded as
+`torch.zeros(75, 1404)` in `_load_visual`, so raising `max_frames` broke batch collation for samples
+without video.
 
-See also [known issue #2](../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed)
-on the 1404-versus-1434 landmark dimension.
+The landmark width itself is **not** a config key — it is derived from `REFINE_LANDMARKS` in
+[`src/constants.py`](../src/constants.py), because it must match what MediaPipe actually returns rather
+than whatever a config file claims. See
+[features.md](features.md#fixed-the-landmark-width-was-hard-coded-three-times).
 
 ---
 
@@ -257,7 +260,8 @@ never compute it by hand, and changing `n_mels` or `cnn_channels` is safe.
 | `num_layers` | Stacked layers |
 | `dropout` | Inter-layer and head dropout |
 
-Input dim is hard-coded to 1404 in [`builder.py`](../src/models/builder.py#L33), not configurable.
+Input dim comes from `LANDMARK_DIM` in [`src/constants.py`](../src/constants.py), not from this
+config block — it is a property of the extractor, not a tunable.
 
 **Keep `visual_lstm.hidden_dim` equal to `audio_cnn_lstm.lstm_hidden`.** When the two embedding dims
 match, `CrossModalAttentionFusion` skips its projection layer (`nn.Identity` instead of `nn.Linear`).
@@ -436,7 +440,8 @@ Hard-coded values you would have to edit code to change:
 | Value | Location | Notes |
 |---|---|---|
 | `UNIFIED` class list | [`src/datasets.py`](../src/datasets.py#L9) | The YAML `emotions.unified` key mirrors but does not drive it |
-| Landmark dim 1404 | `builder.py`, `datasets.py`, `inference.py` | Three separate hard-codings — see known issue #2 |
+| Landmark dim (`LANDMARK_DIM`) | [`src/constants.py`](../src/constants.py) | Derived from the `REFINE_LANDMARKS` switch; every consumer imports it |
+| Audio feature height | [`feature_height`](../src/models/builder.py) | Derived from `n_mels` or `n_mfcc * 3`, per the `--feature` flag |
 | `window_sec` 3.0, `hop_sec` 0.5 | [`stream.py`](../backend/stream.py#L32) | Defaults in the constructor, not read from config |
 | Optimiser (AdamW) | [`train.py`](../scripts/train.py#L126) | `scheduler` key is ignored; cosine is hard-coded |
 | Gradient clip 1.0 | [`train.py`](../scripts/train.py#L67) | — |

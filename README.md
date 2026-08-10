@@ -99,7 +99,7 @@ run on real data:
 | **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
 | **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
 
-**Test suite: 87 tests, all passing** (`python3 -m pytest`, ~19 s on CPU).
+**Test suite: 127 tests, all passing** (`python3 -m pytest`, ~32 s on CPU).
 
 Because no checkpoint exists, the backend starts in a degraded mode: `/health` reports
 `model_loaded: false` and the prediction endpoints return **503**. This is intentional — the server
@@ -224,7 +224,7 @@ SER-System/
 │   ├── public/worklets/
 │   │   └── pcm-processor.js    AudioWorkletProcessor — raw PCM tap
 │   └── vite.config.js          dev server on :3000, /api proxy to :8000
-├── tests/                      87 pytest tests
+├── tests/                      127 pytest tests
 │   ├── conftest.py             synthetic sine-wave fixtures
 │   ├── test_features.py        16 tests
 │   ├── test_datasets.py        22 tests
@@ -265,7 +265,7 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r backend/requirements.txt
 
-python3 -m pytest                  # expect: 87 passed
+python3 -m pytest                  # expect: 127 passed
 uvicorn backend.main:app --reload --port 8000
 ```
 
@@ -653,7 +653,7 @@ Key-by-key reference: [docs/configuration.md](docs/configuration.md).
 ## Testing
 
 ```bash
-python3 -m pytest                      # all 87
+python3 -m pytest                      # all 127
 python3 -m pytest tests/test_model.py  # one module
 python3 -m pytest -k websocket         # by name
 ```
@@ -683,63 +683,68 @@ Full breakdown: [docs/testing.md](docs/testing.md).
 
 ## Known issues and limitations
 
-Found while documenting the codebase and verified by direct execution. None are blocking on the
-audio-only path, which is the one that has been exercised; all three sit on paths that no real data
-has ever traversed.
+### Resolved
 
-### 1. `--feature mfcc` crashes the CNN models — **confirmed**
+Three latent bugs were found while documenting the codebase. All three sat on paths no real data had
+traversed, which is why the original 87-test suite passed over them. Each is now fixed, and each is
+covered by a test that was confirmed to fail when the fix is reverted.
 
-[`EmotionDataset._load_audio`](src/datasets.py#L166) only adds a channel dimension when
-`feature == "mel"`. MFCC tensors therefore reach the model as `(B, 120, 130)`, and `Conv2d` reads the
-batch dimension as channels:
+**1. MFCC input crashed both CNN models.** `EmotionDataset._load_audio` added the channel axis only
+for mel, so MFCC tensors reached `Conv2d` 3-D and it read the batch dimension as channels;
+`InferenceEngine._to_tensor` had the same defect. Both now produce
+`(batch, channel, freq, time)`.
 
-```
-RuntimeError: Given groups=1, weight of size [32, 1, 3, 3],
-expected input[1, 4, 120, 130] to have 1 channels, but got 4 channels instead
-```
+The real fault ran deeper than the missing `unsqueeze`. `AudioCNNLSTM` sizes its LSTM input from how
+far the CNN downsamples the frequency axis, and it was handed `cfg["audio"]["n_mels"]`
+unconditionally — 128, where MFCC + Δ + ΔΔ produces 120 rows. So even with the channel axis correct,
+the LSTM width was wrong and the state dict would not have matched.
+[`build_model`](src/models/builder.py) now takes a `feature` argument and derives the height through
+[`feature_height`](src/models/builder.py); `train.py`, `evaluate.py`, and `InferenceEngine` all pass
+it. It defaults to `"mel"`, so existing call sites are unaffected.
 
-The MFCC extraction itself is correct and tested; only the CNN feeding path is wrong. The `mfcc`
-branch of [`InferenceEngine._to_tensor`](backend/inference.py#L73) has the same shape bug. **Fix:**
-`unsqueeze(0)` unconditionally in `_load_audio`, and use `.unsqueeze(0).unsqueeze(0)` on the
-inference side. Until then, use `--feature mel`.
+**2. The landmark width was hard-coded three times and disagreed with the extractor.**
+`features.py` built FaceMesh with `refine_landmarks=True`, which returns **478** landmarks (1434
+values), while `builder.py`, `datasets.py`, and `inference.py` all assumed 468 (1404) — so real
+landmark files would not have loaded at all.
 
-### 2. Landmark dimensionality is probably 1434, not 1404 — **needs verification with mediapipe installed**
+[`src/constants.py`](src/constants.py) now holds `REFINE_LANDMARKS` as a single switch, with the
+landmark count and flattened width derived from it and every consumer importing them. It is set to
+`False`, keeping 468/1404 and dropping iris refinement, which contributes little to categorical
+emotion. [`extract_visual_features`](src/features.py) additionally validates the count it actually
+receives and raises with an actionable message rather than silently writing arrays the models cannot
+load. Flipping the switch to `True` leaves the entire suite green, which is the property that makes
+it a genuine single source of truth.
 
-[`extract_visual_features`](src/features.py#L97) constructs FaceMesh with `refine_landmarks=True`,
-which adds 10 iris landmarks to the base 468 → **478 landmarks → 1434 values**. But
-`VisualLSTM.input_dim`, the zero-fill in `_load_visual`, and `InferenceEngine._zero_visual` all
-assume 1404. If MediaPipe behaves as documented, real landmark files will not load into the visual
-model at all. The test suite does not catch this because it feeds synthetic `zeros(75, 1404)`.
+**3. MSP-IMPROV speaker IDs collapsed to one speaker.** `f"msp_{fname[:6]}"` evaluates to
+`"msp_MSP-IM"` for every file in the corpus, so all ~8,400 samples became a single split unit and
+went entirely to train, val, or test depending on the seed.
+[`msp_speaker`](src/datasets.py) now scans hyphen-delimited segments for the actor field
+(`M01`–`M06`, `F01`–`F06`) instead of slicing at a fixed offset. Unrecognisable stems bucket together
+as `msp_unknown` and log a warning — coarse, but leakage-safe, where per-file IDs would scatter one
+actor across splits.
 
-`mediapipe` is not installed in the current environment, so this is reasoned from the library's
-documented behaviour rather than observed. **Fix:** either set `refine_landmarks=False` (keeps 1404)
-or set `input_dim=1434` everywhere — and derive the constant in one place rather than hard-coding it
-in three.
+Two adjacent defects were fixed in the same pass: `EmotionDataset` zero-filled missing video at a
+hard-coded `(75, 1404)` rather than the configured `max_frames`, and `evaluate.py`'s latency
+benchmark built its dummy tensors from the `--config` file and a hard-coded 130 frames while the
+model itself was built from the checkpoint's config.
 
-### 3. MSP-IMPROV speaker IDs collapse to a single speaker — **confirmed by inspection**
-
-[`parse_msp_improv`](src/datasets.py#L90) derives the speaker as `f"msp_{fname[:6]}"`. Real
-MSP-IMPROV filenames all begin `MSP-IMPROV-…`, so `fname[:6]` is `"MSP-IM"` for every file in the
-corpus. All MSP-IMPROV samples land in one split unit, which means they all go to train, or all to
-val, or all to test. The speaker-independence guarantee holds trivially but the split is badly
-unbalanced, and MSP-IMPROV may vanish from training entirely depending on the seed. **Fix:** parse
-the actual speaker field (e.g. the `M01`/`F02` segment) instead of a fixed character slice.
-
-### Other constraints
+### Remaining constraints
 
 - **Multimodal checkpoints served over the API run effectively audio-only.** There is no video
-  ingestion path in the backend, so [`_zero_visual`](backend/inference.py#L79) feeds a zero tensor to
+  ingestion path in the backend, so [`_zero_visual`](backend/inference.py) feeds a zero tensor to
   the visual branch. Fusion models will load and predict, but their visual half contributes nothing
   at inference time. A fusion model's *reported* accuracy therefore does not describe its *served*
   accuracy.
-- **`_load_visual` hard-codes `zeros(75, 1404)`** rather than reading `visual.max_frames` from the
-  config, so changing `max_frames` breaks batch collation for samples without video.
 - **Three-second fixed window.** Emotional cues spanning longer turns are outside the model's view.
 - **No voice-activity detection.** Silent or non-speech windows are classified anyway, usually as
   whatever class the model treats as its null hypothesis.
 - **`torch.cuda.amp.GradScaler()`** is the deprecated spelling; it works but emits a warning on
   recent PyTorch. The modern form is `torch.amp.GradScaler("cuda")`.
 - **No JS test suite.** The front end has been verified only by hand.
+- **The visual path is still unexercised end to end.** `mediapipe` is not installed in the
+  development environment, so `extract_visual_features` has never run against a real video. The
+  dimension contract is now enforced at runtime rather than assumed, but the extraction itself
+  remains untested.
 - **Acted, non-clinical, non-Nigerian corpora.** The central external-validity limitation, and the
   reason the roadmap starts where it does.
 
@@ -749,7 +754,11 @@ the actual speaker field (e.g. the `M01`/`F02` segment) instead of a fixed chara
 
 **Immediate — unblock the pipeline**
 
-- [ ] Fix the three issues above (MFCC channel dim, landmark dimensionality, MSP speaker parsing)
+- [x] Fix the MFCC channel dimension and the LSTM width that depended on it
+- [x] Resolve the landmark dimensionality to a single derived constant
+- [x] Fix MSP-IMPROV speaker parsing so the split is genuinely speaker-disjoint
+- [ ] Install `mediapipe` and run `extract_visual_features` against a real video — the one path with
+      no end-to-end coverage
 - [ ] Download corpora and run `preprocess.py` end to end; record the sample counts per class
 - [ ] Train all six architectures under identical conditions and publish the comparison table
 - [ ] Fill in the empty `results/` numbers this README currently cannot report

@@ -22,7 +22,7 @@ Six architectures — three unimodal, three fusion strategies — all reachable 
 |---|---|---:|---|---|
 | `audio_cnn` | unimodal audio | 1,438,694 | `(B,1,128,130)` | 4096 |
 | `audio_cnn_lstm` | unimodal audio | 6,458,982 | `(B,1,128,130)` | 512 |
-| `visual_lstm` | unimodal visual | 3,055,750 | `(B,75,1404)` | 512 |
+| `visual_lstm` | unimodal visual | 3,055,750 | `(B,75,LANDMARK_DIM)` | 512 |
 | `feature_level` | fusion | 10,042,610 | both | — |
 | `decision_level` | fusion | 9,514,734 | both | — |
 | `attention` | fusion | 11,881,970 | both | — |
@@ -203,8 +203,9 @@ descriptor first; the LSTM then models its temporal evolution.
 `AudioCNNLSTM`. That match is what lets `CrossModalAttentionFusion` use `nn.Identity` instead of a
 projection layer.
 
-Input dim 1404 is **hard-coded** in [`builder.py`](../src/models/builder.py#L33), not configurable —
-and it is the value implicated in
+Input dim comes from `LANDMARK_DIM` in [`src/constants.py`](../src/constants.py), imported by both
+`VisualLSTM` and [`builder.py`](../src/models/builder.py). It used to be hard-coded as 1404 in three
+separate files while the extractor produced 1434 — see
 [known issue #2](../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed).
 
 ---
@@ -391,8 +392,9 @@ Unknown names raise with the valid set included, which is what
 raise ValueError(f"Unknown model: {name!r}. Choose from {UNIMODAL | FUSION}")
 ```
 
-[`_n_frames(cfg)`](../src/models/builder.py#L19) computes `floor(sr × duration / hop) + 1` and is
-currently unused by `build_model` — a leftover, since `AudioCNNLSTM` derives its own shapes.
+[`n_frames(cfg)`](../src/models/builder.py) computes `floor(sr × duration / hop) + 1`. `build_model`
+does not need it (`AudioCNNLSTM` derives its own shapes), but `evaluate.py` uses it to size the latency
+benchmark's dummy tensors, which previously hard-coded 130 frames.
 
 ---
 

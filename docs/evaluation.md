@@ -183,7 +183,7 @@ hypothesis is not being borne out — which is a result worth reporting.
 
 ```python
 dummy_a = torch.randn(1, 1, n_mels, 130).to(device)
-dummy_v = torch.zeros(1, 75, 1404).to(device)
+dummy_v = torch.zeros(1, cfg["visual"]["max_frames"], LANDMARK_DIM).to(device)
 
 model.eval()
 with torch.no_grad():
@@ -241,9 +241,10 @@ latency = (time.perf_counter() - t0) * 1000
 That is the number displayed in the front-end UI, and the one to quote when discussing real-time
 feasibility.
 
-The visual dummy is `torch.zeros(1, 75, 1404)` — matching the zero-fill used at serve time, and
-carrying the same 1404-versus-1434 assumption as everything else on the visual path
-([known issue #2](../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed)).
+The dummy shapes are derived rather than literal: `feature_height(cfg, feature)` and `n_frames(cfg)`
+for audio, `LANDMARK_DIM` for visual. They previously hard-coded `n_mels`, 130 frames, and 1404, and
+were built from the `--config` file while the model came from the checkpoint's config — so an mfcc
+checkpoint got a mel-shaped dummy. Both now read the checkpoint's config.
 
 ---
 

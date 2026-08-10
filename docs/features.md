@@ -330,70 +330,104 @@ produces zero mean and unit variance, rather than merely running without error.
 
 ## Known issues
 
-### 1. MFCC tensors lack a channel dimension — confirmed
+### Fixed: MFCC tensors lacked a channel dimension
 
-[`EmotionDataset._load_audio`](../src/datasets.py#L169) adds the channel axis only for mel:
+`EmotionDataset._load_audio` used to add the channel axis only for mel:
 
 ```python
-if self.feature == "mel":
+if self.feature == "mel":       # the bug
     t = t.unsqueeze(0)
 ```
 
-MFCC tensors therefore reach the model as `(B, 120, 130)`, and `Conv2d` interprets the batch dimension
-as channels:
+MFCC tensors therefore reached the model as `(B, 120, 130)` and `Conv2d` interpreted the batch
+dimension as channels:
 
 ```
 RuntimeError: Given groups=1, weight of size [32, 1, 3, 3],
 expected input[1, 4, 120, 130] to have 1 channels, but got 4 channels instead
 ```
 
-Verified by direct execution against both `audio_cnn` and `audio_cnn_lstm`.
-[`InferenceEngine._to_tensor`](../backend/inference.py#L73) has the same defect on the serving side —
-it applies a single `unsqueeze(0)` where the mel branch applies two.
+Both features are `(freq, time)` on disk and both are consumed by `Conv2d`, so both need the axis.
+[`_load_audio`](../src/datasets.py) now unsqueezes unconditionally, and the mfcc branch of
+[`InferenceEngine._to_tensor`](../backend/inference.py) applies two unsqueezes to match the mel branch.
 
-**Fix:** unsqueeze unconditionally in `_load_audio`, and use `.unsqueeze(0).unsqueeze(0)` for the MFCC
-branch in `_to_tensor`. Add a test that runs a full forward pass with `feature="mfcc"` — the current
-tests exercise extraction but never feed the result to a model, which is precisely the gap.
+**The channel axis was only half of it.** `AudioCNNLSTM` sizes its LSTM input from how far the CNN
+downsamples the frequency axis, and the builder passed `n_mels` unconditionally — 128, where MFCC +
+Δ + ΔΔ gives 120 rows. Fixing the unsqueeze alone would have produced a model whose LSTM width did not
+match its own state dict. `build_model` now takes a `feature` argument and derives the height from
+[`feature_height`](../src/models/builder.py). See [models.md](models.md#the-builder).
 
-**Workaround:** use `--feature mel`.
+Covered by `test_audio_chain_forward`, `test_dataset_item_has_channel_axis`, and
+`test_state_dict_round_trip` in [`tests/test_integration.py`](../tests/test_integration.py), which
+chain real extraction → `.npy` → `EmotionDataset` → `DataLoader` → model. The original suite tested
+extraction and mel loading separately but never connected MFCC loading to a model, which is exactly
+where the bug lived.
 
-### 2. Landmark dimensionality is probably 1434, not 1404 — needs verification
+### Fixed: the landmark width was hard-coded three times
 
-`FaceMesh(refine_landmarks=True)` adds 10 iris landmarks to the base 468, giving **478 landmarks →
-1434 values**. But three places assume 1404:
+`FaceMesh(refine_landmarks=True)` returns **478** landmarks (468 base + 10 iris) → 1434 values, but
+three places independently assumed 1404:
 
-| Location | Assumption |
+| Location | Old assumption |
 |---|---|
-| [`builder.py`](../src/models/builder.py#L33) | `VisualLSTM(1404, …)` |
-| [`datasets.py`](../src/datasets.py#L178) | `torch.zeros(75, 1404)` |
-| [`inference.py`](../backend/inference.py#L81) | `torch.zeros(1, max_frames, 1404)` |
+| `builder.py` | `VisualLSTM(1404, …)` |
+| `datasets.py` | `torch.zeros(75, 1404)` |
+| `inference.py` | `torch.zeros(1, max_frames, 1404)` |
 
-If MediaPipe behaves as documented, real landmark files will be `(75, 1434)` and will not load into a
-model expecting 1404. The test suite cannot catch it — it feeds synthetic `zeros(75, 1404)`.
+So real landmark files would not have loaded into the visual model at all. The suite could not catch it
+because it fed synthetic `zeros(75, 1404)` — the tests agreed with the wrong assumption.
 
-`mediapipe` is not installed in the environment where this was written, so this is reasoned from the
-library's documented behaviour rather than observed. **Verify first:**
+[`src/constants.py`](../src/constants.py) now owns the contract:
 
 ```python
-import mediapipe as mp, numpy as np, cv2
-with mp.solutions.face_mesh.FaceMesh(refine_landmarks=True) as m:
-    r = m.process(cv2.cvtColor(cv2.imread("face.jpg"), cv2.COLOR_BGR2RGB))
-    print(len(r.multi_face_landmarks[0].landmark))   # 468 or 478?
+REFINE_LANDMARKS: bool = False
+N_FACE_LANDMARKS: int = 478 if REFINE_LANDMARKS else 468
+LANDMARK_COORDS:  int = 3
+LANDMARK_DIM:     int = N_FACE_LANDMARKS * LANDMARK_COORDS   # 1404
 ```
 
-**Fix:** either set `refine_landmarks=False` (keeps 1404 and drops iris tracking, which contributes
-little to expression) or set the dimension to 1434 everywhere. Either way, define it once as a module
-constant instead of hard-coding it in three files.
+`REFINE_LANDMARKS` is the single switch — it drives the FaceMesh constructor, `VisualLSTM`'s input
+layer, the zero-fill for samples without video, and the serving placeholder. It is `False`, keeping
+468/1404 and dropping iris refinement, which contributes little to categorical emotion. Flipping it to
+`True` leaves the whole suite green, which is what makes it a real single source of truth rather than a
+constant that merely happens to be imported.
 
-### 3. Landmark `normalize` config key is ignored
+`extract_visual_features` now also validates what it actually receives:
 
-`visual.normalize` is read into `vis_cfg` but never consulted —
-`extract_visual_features` always normalises. Harmless (normalisation is always what you want here) but
-misleading. Either honour the flag or remove it.
+```python
+if len(lm) != N_FACE_LANDMARKS:
+    raise ValueError(
+        f"FaceMesh returned {len(lm)} landmarks, expected {N_FACE_LANDMARKS} "
+        f"(REFINE_LANDMARKS={REFINE_LANDMARKS}). "
+        f"Reconcile src/constants.py with your mediapipe version."
+    )
+```
 
-### 4. Pad/crop logic is duplicated
+`preprocess.py` collects that per file into `errors_visual.txt`, so a version mismatch surfaces as a
+clear message rather than as arrays the models silently cannot load.
 
-[`load_audio`](../src/features.py#L17) and
-[`InferenceEngine._pad_or_crop`](../backend/inference.py#L56) implement identical logic separately —
-one takes a path, the other an array. They agree today; nothing enforces that they continue to. Extract
-a shared `pad_or_crop(audio, n)` helper and have both call it.
+> **Still unverified against real video.** `mediapipe` is not installed in the development environment,
+> so `extract_visual_features` has never run on an actual file. The dimension is now checked at runtime
+> instead of assumed, but if your mediapipe build returns a different count you will see the error above
+> — and the fix is to reconcile `constants.py`, not to edit three files.
+
+### Fixed: zero-fill ignored `max_frames`
+
+`_load_visual` hard-coded `torch.zeros(75, 1404)` rather than reading the configured sequence length,
+so changing `visual.max_frames` broke batch collation for samples without video. `EmotionDataset` now
+takes `max_frames` and `train.py` / `evaluate.py` pass `cfg["visual"]["max_frames"]`. Covered by
+`test_zero_fill_shape_follows_config` and `test_zero_fill_is_collatable_with_real_landmarks`.
+
+### Open: landmark `normalize` config key is ignored
+
+`visual.normalize` is read into `vis_cfg` but never consulted — `extract_visual_features` always
+normalises. Harmless (normalisation is always what you want here) but misleading. Either honour the
+flag or remove it.
+
+### Open: pad/crop logic is duplicated
+
+[`load_audio`](../src/features.py) and
+[`InferenceEngine._pad_or_crop`](../backend/inference.py) implement identical logic separately — one
+takes a path, the other an array. They agree today; nothing enforces that they continue to, and a
+divergence would be train/serve skew. Extract a shared `pad_or_crop(audio, n)` helper and have both
+call it.

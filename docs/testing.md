@@ -1,6 +1,6 @@
 # Testing
 
-87 tests across four modules, all passing in ~19 s on CPU with no corpora, no checkpoints, and no GPU.
+127 tests across five modules, all passing in ~32 s on CPU with no corpora, no checkpoints, and no GPU.
 
 - [Running the suite](#running-the-suite)
 - [Design principles](#design-principles)
@@ -17,7 +17,7 @@
 ## Running the suite
 
 ```bash
-python3 -m pytest                          # all 87
+python3 -m pytest                          # all 127
 python3 -m pytest tests/test_model.py      # one module
 python3 -m pytest -k websocket             # by name substring
 python3 -m pytest -k "not api"             # exclude
@@ -49,12 +49,13 @@ periodically to see them (that is how the `torch.cuda.amp.GradScaler` deprecatio
 Expected:
 
 ```
-collected 87 items
-tests/test_api.py ....................                  [ 22%]
-tests/test_datasets.py ......................            [ 48%]
-tests/test_features.py ................                  [ 66%]
-tests/test_model.py .............................        [100%]
-============ 87 passed in 18.75s ============
+collected 127 items
+tests/test_api.py ....................                   [ 15%]
+tests/test_datasets.py .................................  [ 41%]
+tests/test_features.py ................                   [ 54%]
+tests/test_integration.py .............................   [ 77%]
+tests/test_model.py .............................         [100%]
+============ 127 passed in 32.66s ============
 ```
 
 ---
@@ -400,49 +401,52 @@ The mocked engine has `sr = 22050` while the handshake declares 16000, so the re
 
 Honest inventory of what is not tested.
 
-### Not tested at all
+### Closed by test_integration.py
+
+Three bugs shipped because every stage was tested against inputs it constructed itself. That verified
+each consumer but never the *contract between producer and consumer* — which is exactly where the bugs
+lived:
+
+| Was invisible because | Now covered by |
+|---|---|
+| MFCC extraction was tested, and mel dataset loading was tested, but MFCC loading feeding a model was tested by neither | `test_audio_chain_forward`, `test_dataset_item_has_channel_axis`, `test_multimodal_chain_forward` |
+| `test_model.py` built `VISUAL = (B, 75, 1404)` by hand, so models were tested against the *assumed* landmark width, not the extractor's | `test_landmark_constants_consistent`, `test_builder_visual_input_dim_is_the_constant`, `test_zero_fill_shape_follows_config` |
+| No test asserted that a model built for one feature could reload its own weights | `test_state_dict_round_trip` |
+| `InferenceEngine` was mocked in all 20 API tests, so real checkpoint loading and serving-side extraction never ran | `test_inference_engine_real_checkpoint`, `test_inference_engine_mfcc_checkpoint`, `test_inference_engine_zero_visual_width` |
+| MSP-IMPROV fixtures used `MSP-ABC-01` and never asserted on the speaker value | `test_parse_msp_improv_speakers_are_distinct`, `test_msp_speakers_survive_the_split` (in `test_datasets.py`) |
+
+The last hard-coded `1404`s were in the tests themselves. They now import `LANDMARK_DIM`, which is what
+makes flipping `REFINE_LANDMARKS` a one-line change that leaves the suite green — the actual test of
+whether a constant is a single source of truth.
+
+### Still not tested
 
 | Area | Consequence |
 |---|---|
 | `scripts/train.py` | The training loop, class weighting, AMP ordering, early stopping, and checkpoint writing are entirely untested |
 | `scripts/evaluate.py` | Metrics computation, confusion-matrix rendering, latency benchmarking |
 | `scripts/preprocess.py` | Idempotent skipping, error collection, manifest writing |
-| `extract_visual_features` | Requires mediapipe and a video fixture; the `_MEDIAPIPE` guard means it silently returns `None` when absent |
+| `extract_visual_features` | Requires mediapipe and a video fixture. The `_MEDIAPIPE` guard makes it return `None` when absent, so it has never run against a real video. The landmark count is now validated at runtime, but the extraction itself is unexercised |
 | Front end | No JS test runner installed. Zero automated coverage |
-| `InferenceEngine` itself | Mocked in every API test, so real checkpoint loading and feature extraction are never exercised |
-
-### Tested with synthetic substitutes that hide real bugs
-
-Two of the three known issues survive precisely because of these substitutions:
-
-- **`(75, 1404)` synthetic visual tensors.** `test_model.py` constructs `VISUAL = (B, 75, 1404)` by hand,
-  so the models are tested against the *assumed* landmark dimension rather than what MediaPipe actually
-  produces. This is why [known issue #2](../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed)
-  is invisible to the suite.
-- **No end-to-end MFCC path.** MFCC extraction is tested; mel dataset loading is tested; MFCC dataset
-  loading feeding a model is tested nowhere. This is why
-  [known issue #1](../README.md#1---feature-mfcc-crashes-the-cnn-models--confirmed) is invisible.
-
-The lesson generalises: tests that construct their own inputs verify the consumer but not the
-*contract between producer and consumer*. The highest-value tests to add are the ones that connect two
-real stages.
+| `AudioStreamBuffer` in isolation | Exercised only through `test_ws_prediction_after_window_fills`; the hop gate, memory cap, and resampling branch have no direct tests |
 
 ### Highest-value additions
 
-1. **End-to-end MFCC forward pass** — `EmotionDataset(feature="mfcc")` → `DataLoader` → `build_model` →
-   forward. Would have caught issue #1 immediately.
-2. **A real landmark fixture** — one small video committed as a test asset (or a synthetic one generated
-   with OpenCV), extracted through the real MediaPipe path, asserting the dimension the models expect.
-   Would catch issue #2.
-3. **MSP-IMPROV speaker distinctness** — assert that two different actors in `Evalution.txt` produce two
-   different `speaker` values. Would catch issue #3.
-4. **A `train.py` smoke test** — 2 epochs, 20 synthetic samples, `epochs=2`, asserting a checkpoint is
-   written with the right keys. Slow-ish but it covers the largest untested surface in the repository.
-5. **A round-trip `InferenceEngine` test** — save a real checkpoint from a freshly built model, load it,
-   predict on sine audio, assert the response shape. Removes the mock from the one place it hides the
-   most.
-6. **Front-end tests** — Vitest plus React Testing Library for the components, and a mocked WebSocket
-   for `useStream`.
+1. **A real landmark fixture** — one small video committed as a test asset (or generated with OpenCV),
+   extracted through the real MediaPipe path, asserting the dimension the models expect. The only
+   remaining gap of the kind that produced the original three bugs.
+2. **A `train.py` smoke test** — 2 epochs, 20 synthetic samples, asserting a checkpoint is written with
+   the right keys and that the recorded `feature` round-trips into `build_model`. Covers the largest
+   untested surface in the repository.
+3. **`AudioStreamBuffer` unit tests** — that `push` returns `None` until a full window, that the hop gate
+   throttles to the expected rate, that the buffer stays capped at two windows, and that resampling
+   triggers only on a rate mismatch.
+4. **`preprocess.py` idempotency** — run twice, assert the second run writes nothing and that a corrupt
+   file lands in `errors_audio.txt` rather than aborting.
+5. **Front-end tests** — Vitest plus React Testing Library for the components, and a mocked WebSocket for
+   `useStream`. The stale-`status` closure bug documented in
+   [frontend/state-management.md](frontend/state-management.md#the-stale-status-closure) would be caught
+   by a test that errors a connection and then closes it.
 
 ---
 

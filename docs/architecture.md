@@ -240,9 +240,11 @@ it robust to input size: any spectrogram dimensions collapse to `channels[-1] ×
 | Dataset item | `(120, 130)` — **no channel dimension added** |
 | Batched | `(32, 120, 130)` |
 
-That last row is [known issue #1](../README.md#1---feature-mfcc-crashes-the-cnn-models--confirmed):
-`Conv2d` needs 4-D input and interprets `(32, 120, 130)` as unbatched with 120 channels. `--feature
-mfcc` raises `RuntimeError` for both CNN models. Verified by direct execution.
+That last row was a bug: `Conv2d` needs 4-D input and read `(32, 120, 130)` as unbatched with 120
+channels, so `--feature mfcc` raised `RuntimeError` for both CNN models. `_load_audio` now unsqueezes
+for both features, giving `(32, 1, 120, 130)`. Fixing the rank was only half of it — see
+[the builder](#build_modelname-cfg-num_classes--the-factory) on the LSTM width that also depended on
+the feature type.
 
 ### Visual path
 
@@ -257,10 +259,10 @@ mfcc` raises `RuntimeError` for both CNN models. Verified by direct execution.
 | After attention pooling | `(32, 512)` |
 | Logits | `(32, 6)` |
 
-The 1404-versus-1434 ambiguity is
-[known issue #2](../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed).
-`refine_landmarks=True` in [`features.py`](../src/features.py#L99) should yield 478 landmarks, while
-three separate places assume 468. Resolve before trusting the visual path.
+The 1404-versus-1434 ambiguity is resolved: `LANDMARK_DIM` in
+[`src/constants.py`](../src/constants.py) is derived from a single `REFINE_LANDMARKS` switch and
+imported by every consumer, and `extract_visual_features` validates the count it receives. See
+[features.md](features.md#fixed-the-landmark-width-was-hard-coded-three-times).
 
 ### Fusion
 
