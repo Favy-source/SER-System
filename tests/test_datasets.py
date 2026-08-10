@@ -2,6 +2,7 @@
 Tests for src/datasets.py — parsing, splits, and Dataset class.
 """
 import numpy as np
+from pathlib import Path
 import pandas as pd
 import pytest
 
@@ -399,3 +400,68 @@ def test_split_is_reproducible_with_extension_dtype():
     b = speaker_independent_split(df, 0.15, 0.15, seed=3)
     for x, y in zip(a, b):
         assert set(x["speaker"]) == set(y["speaker"])
+
+
+# ── RAVDESS video pairing ─────────────────────────────────
+#
+# Field 1 of a RAVDESS filename is the MODALITY: 01 = audio-visual,
+# 02 = video-only, 03 = audio-only. So audio is `03-...wav` and its video
+# counterpart is `01-...mp4` — a DIFFERENT stem. The parser previously used
+# wav.with_suffix(".mp4"), which looks for `03-...mp4`; no RAVDESS release
+# contains such a file, so the visual stream was never found even with the video
+# archives fully downloaded, and every sample silently got a zero-filled face.
+
+
+def test_ravdess_video_for_maps_audio_to_av_modality(tmp_path):
+    from src.datasets import ravdess_video_for
+    wav = tmp_path / "03-01-05-01-02-01-12.wav"
+    wav.touch()
+    vid = tmp_path / "01-01-05-01-02-01-12.mp4"      # 01 = audio-visual
+    vid.touch()
+    assert ravdess_video_for(wav) == vid
+
+
+def test_ravdess_video_for_falls_back_to_video_only_modality(tmp_path):
+    from src.datasets import ravdess_video_for
+    wav = tmp_path / "03-01-03-01-01-01-07.wav"
+    wav.touch()
+    vid = tmp_path / "02-01-03-01-01-01-07.mp4"      # 02 = video-only
+    vid.touch()
+    assert ravdess_video_for(wav) == vid
+
+
+def test_ravdess_video_for_prefers_audio_visual_over_video_only(tmp_path):
+    from src.datasets import ravdess_video_for
+    wav = tmp_path / "03-01-04-01-01-01-02.wav"
+    wav.touch()
+    (tmp_path / "01-01-04-01-01-01-02.mp4").touch()
+    (tmp_path / "02-01-04-01-01-01-02.mp4").touch()
+    assert ravdess_video_for(wav).name.startswith("01-")
+
+
+def test_ravdess_video_for_none_when_absent(tmp_path):
+    from src.datasets import ravdess_video_for
+    wav = tmp_path / "03-01-05-01-02-01-12.wav"
+    wav.touch()
+    assert ravdess_video_for(wav) is None
+
+
+def test_ravdess_video_for_does_not_use_the_wav_stem(tmp_path):
+    """The old bug: a same-stem .mp4 is NOT what RAVDESS ships."""
+    from src.datasets import ravdess_video_for
+    wav = tmp_path / "03-01-05-01-02-01-12.wav"
+    wav.touch()
+    (tmp_path / "03-01-05-01-02-01-12.mp4").touch()   # this never exists in RAVDESS
+    assert ravdess_video_for(wav) is None, "must not match the audio-only modality"
+
+
+def test_parse_ravdess_finds_video_with_correct_modality(tmp_path):
+    actor = tmp_path / "Actor_12"
+    actor.mkdir()
+    (actor / "03-01-05-01-02-01-12.wav").touch()
+    (actor / "01-01-05-01-02-01-12.mp4").touch()
+
+    df = parse_ravdess(str(tmp_path), RAVDESS_MAP)
+    assert len(df) == 1
+    assert df.iloc[0]["video_path"] is not None, "video was not paired to the audio"
+    assert Path(df.iloc[0]["video_path"]).name == "01-01-05-01-02-01-12.mp4"

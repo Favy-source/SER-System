@@ -18,6 +18,31 @@ IDX2LABEL = {i: e for e, i in LABEL2IDX.items()}
 # Dataset parsers
 # ---------------------------------------------------------------------------
 
+def ravdess_video_for(wav: Path) -> Optional[Path]:
+    """Locate the video counterpart of a RAVDESS audio file.
+
+    Field 1 of a RAVDESS filename is the MODALITY:
+        01 = full audio-visual, 02 = video-only, 03 = audio-only
+
+    So an audio file is `03-01-05-01-02-01-12.wav` and its video counterpart is
+    `01-01-05-01-02-01-12.mp4` — every other field identical, but a DIFFERENT
+    stem. `wav.with_suffix(".mp4")` therefore looks for `03-...mp4`, which does
+    not exist in any RAVDESS release, and the visual stream was silently never
+    found even with the video archives fully downloaded.
+
+    Prefers 01 (audio-visual) over 02 (video-only); both contain the same frames.
+    Returns None when neither is present.
+    """
+    parts = wav.stem.split("-")
+    if len(parts) < 7:
+        return None
+    for modality in ("01", "02"):
+        cand = wav.with_name("-".join([modality] + parts[1:]) + ".mp4")
+        if cand.exists():
+            return cand
+    return None
+
+
 def parse_ravdess(root: str, emotion_map: dict) -> pd.DataFrame:
     records = []
     for f in sorted(Path(root).rglob("*.wav")):
@@ -27,10 +52,10 @@ def parse_ravdess(root: str, emotion_map: dict) -> pd.DataFrame:
         label = emotion_map.get(parts[2])
         if label is None:
             continue
-        video = f.with_suffix(".mp4")
+        video = ravdess_video_for(f)
         records.append({
             "audio_path": str(f),
-            "video_path": str(video) if video.exists() else None,
+            "video_path": str(video) if video is not None else None,
             "label": label,
             "speaker": f"ravdess_{parts[6]}",
             "dataset": "ravdess",
