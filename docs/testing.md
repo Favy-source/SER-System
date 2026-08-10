@@ -6,9 +6,10 @@
 - [Design principles](#design-principles)
 - [Fixtures](#fixtures)
 - [test_features.py](#test_featurespy--16-tests)
-- [test_datasets.py](#test_datasetspy--22-tests)
+- [test_datasets.py](#test_datasetspy--33-tests)
 - [test_model.py](#test_modelpy--29-tests)
 - [test_api.py](#test_apipy--20-tests)
+- [test_integration.py](#test_integrationpy--29-tests)
 - [Coverage gaps](#coverage-gaps)
 - [Adding tests](#adding-tests)
 
@@ -69,7 +70,7 @@ synthesised from sine waves; dataset parsers are fed `touch()`ed empty files; th
 `MagicMock`ed. This is what makes the suite runnable in CI, on a fresh clone, and on a machine that has
 never had access to the licensed corpora.
 
-**2. Fast enough to run constantly.** ~19 s total. Small batch size (`B = 4`), CPU-only, no training
+**2. Fast enough to run constantly.** ~32 s total. Small batch size (`B = 4`), CPU-only, no training
 loops. A suite you run before every commit has to be a suite you do not mind waiting for.
 
 **3. Properties, not values.** The tests assert structural and invariant properties — shapes, disjointness,
@@ -156,7 +157,7 @@ and the hardest to diagnose after the fact.
 
 ---
 
-## test_datasets.py — 22 tests
+## test_datasets.py — 33 tests
 
 Corpus parsing, splitting, and the torch Dataset. [`tests/test_datasets.py`](../tests/test_datasets.py)
 
@@ -191,6 +192,31 @@ mislabelling its output.
 | `test_parse_msp_improv_skips_missing_files` | Labels with no audio on disk are dropped |
 | `test_parse_msp_improv_missing_label_file` | Missing `Evalution.txt` → empty DataFrame, no exception |
 
+### MSP-IMPROV speaker extraction (11)
+
+Added after `fname[:6]` was found to yield `"MSP-IM"` for every file in the corpus, collapsing all
+~8,400 samples into one split unit. These use **real-format stems** — the original fixtures used the
+synthetic `MSP-ABC-01` and never asserted on the speaker value, which is why the suite passed over it.
+
+| Test | Asserts |
+|---|---|
+| `test_msp_speaker_extracts_actor_field` | The actor segment is returned — parametrised over 4 real stems |
+| `test_msp_speaker_distinguishes_actors` | **Distinct actors yield distinct ids** — the core regression |
+| `test_msp_speaker_ignores_session_and_take_fields` | Not `S01A`, not `FM01`, not `MSP` or `IMPROV` |
+| `test_msp_speaker_same_actor_across_sessions_is_one_id` | One actor stays one unit across sessions |
+| `test_msp_speaker_unrecognised_returns_none` | Unparseable stems return `None`, not a guess |
+| `test_parse_msp_improv_speakers_are_distinct` | Through the parser on a synthetic real-format corpus |
+| `test_parse_msp_improv_unrecognised_stem_buckets_together` | Unknown stems share `msp_unknown` |
+| `test_msp_speakers_survive_the_split` | **Distinct actors reach distinct splits** |
+
+The last is the one that matters. Asserting that `msp_speaker` returns `"M01"` tests a string function;
+asserting that 12 actors produce a non-degenerate train/val/test partition tests the property the split
+exists to provide. It fails on the old implementation with all 12 collapsed to `msp_MSP-IM`.
+
+`test_msp_speaker_same_actor_across_sessions_is_one_id` pins the safe direction of an ambiguity: if a
+release numbered actors per session, merging them is coarse but leakage-free, whereas splitting one
+actor across units would be exactly the leakage the speaker split prevents.
+
 All parser tests build synthetic corpora with `tmp_path` and `touch()`:
 
 ```python
@@ -203,10 +229,10 @@ def test_parse_ravdess_labels(tmp_path):
 The files are empty. Parsers read filenames and label files, never audio content, so this is sufficient —
 and it keeps the tests instant and dependency-free.
 
-**Note:** no test asserts on MSP-IMPROV speaker *values*, only that parsing succeeds. That is why
-[the speaker-collapse bug](datasets.md#known-issues) — `fname[:6]` yielding `"MSP-IM"` for every real
-file — survives the suite. A test asserting distinct speakers for distinct actors would have caught it,
-and should be added with the fix.
+**These three fixtures assert only that parsing succeeds, never on the speaker value** — which is how
+the speaker-collapse bug (`fname[:6]` yielding `"MSP-IM"` for every real file) survived the suite. The
+stems they use, `MSP-ABC-01`, do not even resemble the real format. They are kept as label-parsing tests;
+speaker extraction is covered separately below, against real-format stems.
 
 ### Speaker-independent split (4)
 
@@ -238,10 +264,9 @@ unequal sample counts, so 15% of speakers is only approximately 15% of samples.
 `test_dataset_missing_video_returns_zeros` pins the behaviour that makes audio-only corpora usable in
 multimodal training. Without the zero-fill, MSP-IMPROV could not participate at all.
 
-Note that no test loads an item with `feature="mfcc"` — which is precisely the gap that lets
-[known issue #1](../README.md#1---feature-mfcc-crashes-the-cnn-models--confirmed) through. The MFCC
-*extraction* is tested in `test_features.py`, and the mel *loading* is tested here, but the MFCC loading
-path is covered by neither.
+The MFCC loading path used to be covered by nothing — extraction was tested in `test_features.py` and
+mel loading here, but never MFCC loading feeding a model. That gap is now covered in
+[test_integration.py](#test_integrationpy--29-tests).
 
 ---
 
@@ -249,8 +274,9 @@ path is covered by neither.
 
 All six architectures and the factory. [`tests/test_model.py`](../tests/test_model.py)
 
-Constants: `B = 4`, `MEL = (4, 1, 128, 130)`, `VISUAL = (4, 75, 1404)`, and a minimal `CFG` dict
-sufficient for `build_model`.
+Constants: `B = 4`, `MEL = (4, 1, 128, 130)`, `VISUAL = (4, 75, LANDMARK_DIM)`, and a minimal `CFG`
+dict sufficient for `build_model`. `VISUAL` imports the constant rather than hard-coding 1404, so the
+module cannot drift from the extractor's actual output width.
 
 ### Forward shapes (6)
 
@@ -394,6 +420,78 @@ and the response envelope in one path. It is the closest thing here to an integr
 
 The mocked engine has `sr = 22050` while the handshake declares 16000, so the resampling branch in
 `AudioStreamBuffer.push` is exercised too.
+
+---
+
+## test_integration.py — 29 tests
+
+Cross-stage contract tests. [`tests/test_integration.py`](../tests/test_integration.py)
+
+This module exists because of a specific failure of the rest of the suite. Every other module tests its
+stage against inputs it constructs itself, which verifies the consumer but never the *contract between
+producer and consumer* — and three real bugs lived precisely in that gap. So these tests deliberately
+chain real stages rather than substituting fixtures:
+
+```
+audio file → extract_audio_features → .npy → EmotionDataset → DataLoader → build_model → forward
+```
+
+Unlike the rest of the suite, this module reads the real `config/settings.yaml`, because the contract
+being tested is between the config and the code that consumes it.
+
+### Feature height (4)
+
+| Test | Asserts |
+|---|---|
+| `test_feature_height_matches_extraction` | The height `build_model` assumes equals the height on disk, for both features |
+| `test_mel_and_mfcc_heights_differ` | 128 ≠ 120 — if these were equal, the LSTM-width bug would be unobservable |
+| `test_feature_height_honours_use_delta` | `use_delta: false` gives `n_mfcc`, not `n_mfcc * 3` |
+
+The second is a test about the *test suite's* ability to detect a bug, which is unusual but warranted:
+the whole MFCC failure mode depends on the two feature types having different frequency heights.
+
+### The full chain (14)
+
+| Test | Asserts |
+|---|---|
+| `test_dataset_item_has_channel_axis` | Both features arrive `(1, freq, time)` — parametrised over mel and mfcc |
+| `test_audio_chain_forward` | Extraction → Dataset → DataLoader → model → `(4, 6)` logits, no NaN. Parametrised over 2 features × 2 CNN models |
+| `test_multimodal_chain_forward` | Same for all three fusion strategies, with real landmark arrays. 2 features × 3 models |
+| `test_state_dict_round_trip` | A model built for one feature reloads its own weights, **and raises when loaded into a model built for the other** |
+
+`test_audio_chain_forward` asserts `xb.dim() == 4` before the forward pass, so a rank regression fails
+with "Conv2d needs 4-D input, got (4, 120, 130)" rather than a deeper PyTorch error.
+
+`test_state_dict_round_trip`'s negative case is the important half. It pins the fact that the feature
+type is part of the architecture, not just a preprocessing detail — which is why `build_model` takes it
+and why checkpoints record it.
+
+### Landmark dimension (7)
+
+| Test | Asserts |
+|---|---|
+| `test_landmark_constants_consistent` | `LANDMARK_DIM == N_FACE_LANDMARKS * 3`, and the count is 468 or 478 |
+| `test_visual_lstm_default_input_dim_is_the_constant` | `VisualLSTM().proj.in_features == LANDMARK_DIM` |
+| `test_builder_visual_input_dim_is_the_constant` | Same through `build_model` |
+| `test_zero_fill_shape_follows_config` | Missing video zero-fills at the configured `max_frames` — parametrised over 75, 40, 100 |
+| `test_zero_fill_is_collatable_with_real_landmarks` | Zero-filled and real visual tensors batch together |
+
+The last one models the normal case rather than an edge case: MSP-IMPROV has no video at all, so any
+real manifest mixes zero-filled and real landmark rows. A width or length disagreement between them
+breaks collation at training time, which is when you would least like to discover it.
+
+### InferenceEngine round-trip (4)
+
+| Test | Asserts |
+|---|---|
+| `test_inference_engine_real_checkpoint` | Save a real checkpoint, load it through `InferenceEngine`, predict on sine audio. Parametrised over `audio_cnn_lstm` and `attention` |
+| `test_inference_engine_zero_visual_width` | The serving placeholder matches the visual branch's input width |
+| `test_inference_engine_mfcc_checkpoint` | An mfcc checkpoint loads, `_to_tensor` returns 4-D, and prediction succeeds |
+
+All 20 API tests mock the engine, so checkpoint loading and serving-side feature extraction were
+otherwise never executed. These remove the mock from the one place it hid the most, and they assert the
+response contract directly: `emotion in UNIFIED`, all six probability keys present, probabilities summing
+to ~1, and `latency_ms > 0`.
 
 ---
 

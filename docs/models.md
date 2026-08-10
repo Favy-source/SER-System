@@ -206,7 +206,7 @@ projection layer.
 Input dim comes from `LANDMARK_DIM` in [`src/constants.py`](../src/constants.py), imported by both
 `VisualLSTM` and [`builder.py`](../src/models/builder.py). It used to be hard-coded as 1404 in three
 separate files while the extractor produced 1434 — see
-[known issue #2](../README.md#2-landmark-dimensionality-is-probably-1434-not-1404--needs-verification-with-mediapipe-installed).
+[features.md](features.md#fixed-the-landmark-width-was-hard-coded-three-times).
 
 ---
 
