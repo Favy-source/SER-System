@@ -25,6 +25,10 @@ notebooks/.ipynb_checkpoints/
 frontend/node_modules/
 frontend/dist/
 
+# MediaPipe vendored assets (34 MB wasm + 3.6 MB model)
+# Regenerate with: cd frontend && npm run setup:mediapipe
+frontend/public/mediapipe/
+
 # IDE
 .idea/
 .vscode/

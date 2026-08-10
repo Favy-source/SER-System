@@ -8,7 +8,11 @@ state carries diagnostic information that a spoken transcript alone loses.
 The system spans the whole path from raw corpora to a live browser demo: dataset parsing, feature
 extraction, six model architectures (three unimodal, three fusion strategies), a training and
 evaluation harness, a FastAPI inference server with WebSocket streaming, and a React front end that
-classifies emotion from a live microphone in near real time.
+classifies emotion from a live microphone and webcam in near real time.
+
+It targets two deployment profiles: a **PC with a webcam**, where both modalities are available, and an
+**embedded wearable**, where they are not. See [Remaining constraints](#remaining-constraints) for the
+measured gap between the current models and MCU budgets.
 
 ```
  corpora ──▶ preprocess ──▶ train ──▶ evaluate ──▶ serve ──▶ browser
@@ -27,6 +31,7 @@ classifies emotion from a live microphone in near real time.
 - [System architecture](#system-architecture)
 - [Repository layout](#repository-layout)
 - [Quick start](#quick-start)
+- [Webcam mode](#webcam-mode)
 - [End-to-end walkthrough](#end-to-end-walkthrough)
 - [Emotion taxonomy](#emotion-taxonomy)
 - [Datasets](#datasets)
@@ -94,12 +99,12 @@ run on real data:
 | Training harness | ✅ Implemented | Never executed on real data |
 | Evaluation harness | ✅ Implemented | Never executed on real data |
 | FastAPI backend | ✅ Implemented, tested | 20 tests, engine mocked |
-| React front end | ✅ Implemented | Manual verification only, no JS test suite |
+| React front end | ✅ Implemented | Audio + webcam landmarks; verified rendering headlessly, no JS unit tests |
 | **Trained checkpoints** | ❌ None | [`models/`](models/) is empty |
 | **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
 | **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
 
-**Test suite: 127 tests, all passing** (`python3 -m pytest`, ~32 s on CPU).
+**Test suite: 166 tests, all passing** (`python3 -m pytest`, ~31 s on CPU).
 
 Because no checkpoint exists, the backend starts in a degraded mode: `/health` reports
 `model_loaded: false` and the prediction endpoints return **503**. This is intentional — the server
@@ -125,12 +130,16 @@ is designed to boot without a model rather than crash, so the front end can be d
 - FastAPI app with lifespan-managed model loading, so a missing checkpoint degrades instead of crashing
 - File upload prediction for any format libsndfile can read
 - WebSocket streaming with server-side sliding-window buffering (3 s window, 0.5 s hop)
+- Opt-in visual channel over the same socket via 4-byte tagged binary frames, backward compatible
+  with untagged audio-only clients
 - Runtime checkpoint hot-swap without a restart — useful for A/B-ing architectures in a demo
 - Automatic resampling from the browser's 16 kHz capture rate to the model's 22.05 kHz
 
 **Front end**
 
 - AudioWorklet-based raw PCM capture with a ScriptProcessorNode fallback for older browsers
+- Opt-in webcam face tracking via MediaPipe FaceLandmarker — landmarks only, no video leaves the browser
+- Per-prediction modality reporting, so audio-only and genuinely multimodal results are distinguishable
 - Live emotion display, animated per-class probability bars, scrolling prediction timeline
 - Drag-and-drop file analysis alongside live streaming
 - Backend health polling with a traffic-light status indicator
@@ -301,6 +310,47 @@ curl -s localhost:8000/health | python3 -m json.tool
 ```
 
 Live streaming and file prediction stay unavailable until a checkpoint exists — see the next section.
+
+---
+
+## Webcam mode
+
+Face tracking is opt-in and adds a second modality to the live stream. It only contributes when a
+**fusion** checkpoint is loaded — vision cannot help an audio-only architecture, and the server says so
+in the handshake rather than pretending otherwise.
+
+```bash
+cd frontend
+npm run setup:mediapipe    # once; also runs automatically before dev/build
+npm run dev
+```
+
+Then toggle **Face tracking → On** before pressing the mic.
+
+**Only landmark coordinates leave the browser — never video.** MediaPipe FaceLandmarker runs locally and
+the client sends raw `(x, y, z)` per landmark, about 56 KB/s at 10 fps. The server normalises them with
+the *same* `normalize_landmarks` that produced the training features, so that maths exists in exactly one
+place instead of being reimplemented in JavaScript. That is both a privacy property worth having in a
+clinical setting and the structural reason there is no train/serve skew on this path.
+
+Landmarks travel over the same WebSocket as audio, using 4-byte tagged binary frames. Clients that do
+not opt in keep sending untagged PCM and are unaffected — verified by
+`test_ws_untagged_audio_still_works`.
+
+Every prediction reports which modalities actually fired:
+
+```json
+{"emotion": "happy", "modalities": ["audio", "visual"], "visual_active": true, "...": "..."}
+```
+
+If the face track drops out — user leaves frame, camera covered, client cannot sustain the frame rate —
+the prediction degrades to `["audio"]` and says so, rather than quietly feeding the model a stale or zero
+face and overstating what it did. The UI surfaces this too: the status bar shows the modality list, green
+when both fired.
+
+Setup notes: the vendored assets (~34 MB WASM + 3.6 MB model) live in `frontend/public/mediapipe/` and
+are gitignored. A failed download is non-fatal — face tracking is simply unavailable and the app runs
+audio-only. Full detail in [docs/frontend/video-pipeline.md](docs/frontend/video-pipeline.md).
 
 ---
 
@@ -653,7 +703,7 @@ Key-by-key reference: [docs/configuration.md](docs/configuration.md).
 ## Testing
 
 ```bash
-python3 -m pytest                      # all 127
+python3 -m pytest                      # all 166
 python3 -m pytest tests/test_model.py  # one module
 python3 -m pytest -k websocket         # by name
 ```
@@ -730,17 +780,24 @@ model itself was built from the checkpoint's config.
 
 ### Remaining constraints
 
-- **Multimodal checkpoints served over the API run effectively audio-only.** There is no video
-  ingestion path in the backend, so [`_zero_visual`](backend/inference.py) feeds a zero tensor to
-  the visual branch. Fusion models will load and predict, but their visual half contributes nothing
-  at inference time. A fusion model's *reported* accuracy therefore does not describe its *served*
-  accuracy.
+- **A fusion model with no live face still falls back to a zero visual tensor** — but it now reports
+  that honestly, as `visual_active: false` and `modalities: ["audio"]`, so a caller can tell whether a
+  prediction was genuinely multimodal. Streaming a webcam makes it genuinely multimodal; see
+  [Webcam mode](#webcam-mode).
 - **Three-second fixed window.** Emotional cues spanning longer turns are outside the model's view.
 - **No voice-activity detection.** Silent or non-speech windows are classified anyway, usually as
   whatever class the model treats as its null hypothesis.
 - **`torch.cuda.amp.GradScaler()`** is the deprecated spelling; it works but emits a warning on
   recent PyTorch. The modern form is `torch.amp.GradScaler("cuda")`.
-- **No JS test suite.** The front end has been verified only by hand.
+- **No JS test suite.** Component and hook behaviour has no automated coverage. Page rendering is
+  verified headlessly (0 console errors, 0 failed requests), and the whole visual *protocol* is
+  covered by Python tests against the real app — but `useFaceTracking` itself is not unit-tested.
+- **No wearable deployment path yet.** The measured profile is far outside MCU budgets: current
+  models need 258–921 MMACs and 2–4 MB of peak activation against ~50–400 MMAC/s and 256 KB–1 MB on
+  a Cortex-M class part. A retuned config (16 kHz, 512-pt FFT, 40 mels, slimmer backbone) measures
+  188 KB int8 weights, 79 KB peak activation and 29 MMAC/s sustained, which does fit — but it is a
+  different model that has not been trained, and `librosa` cannot run on an MCU, so the on-device
+  feature extractor will be separate code needing validation against the Python reference.
 - **The visual path is still unexercised end to end.** `mediapipe` is not installed in the
   development environment, so `extract_visual_features` has never run against a real video. The
   dimension contract is now enforced at runtime rather than assumed, but the extraction itself

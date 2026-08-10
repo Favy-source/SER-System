@@ -166,6 +166,14 @@ There is **no file-size limit** and the entire body is read into memory before p
 | `probabilities` | `dict[str, float]` | All six classes, 4 dp, sums to ~1.0 (rounding) |
 | `latency_ms` | `float` | pad/crop + feature extraction + forward + softmax. Excludes decode and HTTP |
 | `model_name` | `str` | Architecture that produced this prediction |
+| `modalities` | `list[str]` | Which modalities actually contributed: `["audio"]` or `["audio","visual"]` |
+| `visual_active` | `bool` | Whether a real landmark window was used, rather than the zero fallback |
+
+**`modalities` describes that specific prediction, not the model.** A fusion checkpoint with no live
+face track predicts on a zero visual tensor and honestly reports `["audio"]` — because its accuracy in
+that condition is not the accuracy it was evaluated at. `POST /predict/audio` has no visual channel, so
+it always reports `["audio"]`; stream over
+[`/ws/stream`](websocket-protocol.md#visual-streaming) for multimodal.
 
 **`confidence` is a raw softmax output and is not calibrated.** Neural networks are typically
 overconfident; 0.87 does not mean "87% likely correct". Do not present it to a user as a probability of

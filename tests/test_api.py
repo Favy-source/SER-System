@@ -27,16 +27,26 @@ MOCK_PRED = {
     "probabilities": {e: (0.87 if e == "happy" else round(0.13 / 5, 4)) for e in UNIFIED},
     "latency_ms":    11.5,
     "model_name":    "audio_cnn_lstm",
+    "modalities":    ["audio"],
+    "visual_active": False,
 }
 
+MAX_FRAMES = 75
 
-def _make_engine():
+
+def _make_engine(model_name="audio_cnn_lstm", multimodal=False):
+    """Mock engine. Attributes mirror the real InferenceEngine surface that
+    main.py reads — model_name, device, sr, cfg, multimodal — because the
+    WebSocket handshake serialises several of them into the ready payload."""
     eng = MagicMock()
-    eng.model_name              = "audio_cnn_lstm"
-    eng.device                  = "cpu"
-    eng.sr                      = 22050
-    eng.predict.return_value            = MOCK_PRED
-    eng.predict_from_bytes.return_value = MOCK_PRED
+    eng.model_name = model_name
+    eng.device     = "cpu"
+    eng.sr         = 22050
+    eng.multimodal = multimodal
+    eng.cfg        = {"visual": {"max_frames": MAX_FRAMES}}
+    pred = {**MOCK_PRED, "model_name": model_name}
+    eng.predict.return_value            = pred
+    eng.predict_from_bytes.return_value = pred
     return eng
 
 
@@ -62,9 +72,24 @@ def client():
 
 @pytest.fixture
 def client_m():
-    """TestClient with a mocked InferenceEngine."""
+    """TestClient with a mocked unimodal InferenceEngine."""
     from backend.main import app
     with patch("backend.main._load_engine", return_value=_make_engine()):
+        with TestClient(app) as c:
+            yield c
+
+
+@pytest.fixture
+def engine_mm():
+    """A mocked fusion engine, so the visual path is reachable."""
+    return _make_engine("attention", multimodal=True)
+
+
+@pytest.fixture
+def client_mm(engine_mm):
+    """TestClient with a mocked multimodal (fusion) InferenceEngine."""
+    from backend.main import app
+    with patch("backend.main._load_engine", return_value=engine_mm):
         with TestClient(app) as c:
             yield c
 
@@ -249,3 +274,203 @@ def test_ws_ping_returns_pong(client_m):
 
     assert msg["type"] == "info"
     assert "pong" in msg["payload"].get("message", "").lower()
+
+
+# ── Visual streaming over the WebSocket ───────────────────
+#
+# Before this path existed, fusion checkpoints were served with a zero visual
+# tensor: the model loaded and predicted, but its visual branch contributed
+# nothing, so a "multimodal" prediction was audio-only in everything but name.
+# These tests pin the opt-in negotiation, the tagged framing, and — most
+# importantly — that the response reports which modalities actually ran.
+
+import struct
+
+import numpy as np
+
+from src.constants import LANDMARK_COORDS, N_FACE_LANDMARKS
+
+TAG_AUDIO, TAG_LANDMARKS = 0, 1
+
+
+def _tagged(tag: int, payload: bytes) -> bytes:
+    """4-byte header: tag + 3 reserved, keeping the float32 payload aligned."""
+    return struct.pack("<Bxxx", tag) + payload
+
+
+def _landmark_frame(n=None) -> bytes:
+    n = n or N_FACE_LANDMARKS
+    return np.random.rand(n, LANDMARK_COORDS).astype(np.float32).tobytes()
+
+
+def _pcm(seconds=3.2, sr=16000) -> bytes:
+    return np.zeros(int(sr * seconds), dtype=np.float32).tobytes()
+
+
+def _handshake(ws, **extra):
+    ws.send_text(json.dumps({"sample_rate": 16000, **extra}))
+    return ws.receive_json()
+
+
+# --- negotiation ---
+
+
+def test_ws_visual_disabled_by_default(client_mm):
+    """Opt-in only: a plain handshake must not enable visual."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        ready = _handshake(ws)
+    assert ready["payload"]["visual_enabled"] is False
+    assert ready["payload"]["tagged_binary"] is False
+
+
+def test_ws_visual_enabled_when_requested(client_mm):
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        ready = _handshake(ws, tagged_binary=True, visual=True)
+    p = ready["payload"]
+    assert p["visual_enabled"] is True
+    assert p["multimodal_model"] is True
+    assert p["expected_landmarks"] == N_FACE_LANDMARKS
+    assert p["max_frames"] == MAX_FRAMES
+
+
+def test_ws_visual_refused_for_unimodal_model(client_m):
+    """An audio-only checkpoint cannot use vision, however the client asks."""
+    with client_m.websocket_connect("/ws/stream") as ws:
+        ready = _handshake(ws, tagged_binary=True, visual=True)
+    assert ready["payload"]["visual_enabled"] is False
+    assert ready["payload"]["multimodal_model"] is False
+
+
+def test_ws_visual_requires_tagged_binary(client_mm):
+    """Without tagging there is no way to tell landmarks from PCM."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        ready = _handshake(ws, visual=True)
+    assert ready["payload"]["visual_enabled"] is False
+
+
+# --- backward compatibility ---
+
+
+def test_ws_untagged_audio_still_works(client_mm):
+    """Legacy clients send bare PCM and must be unaffected."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws)
+        ws.send_bytes(_pcm())
+        msg = ws.receive_json()
+    assert msg["type"] == "prediction"
+
+
+def test_ws_tagged_audio_produces_prediction(client_mm):
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        ws.send_bytes(_tagged(TAG_AUDIO, _pcm()))
+        msg = ws.receive_json()
+    assert msg["type"] == "prediction"
+
+
+# --- landmarks reach the engine ---
+
+
+def test_ws_landmarks_do_not_trigger_inference(client_mm):
+    """Audio drives the clock; landmarks only update state."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        for _ in range(5):
+            ws.send_bytes(_tagged(TAG_LANDMARKS, _landmark_frame()))
+        ws.send_text(json.dumps({"type": "ping"}))
+        msg = ws.receive_json()
+    assert msg["type"] == "info"
+    assert "pong" in msg["payload"]["message"].lower()
+
+
+def test_ws_landmarks_are_buffered(client_mm):
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        for _ in range(7):
+            ws.send_bytes(_tagged(TAG_LANDMARKS, _landmark_frame()))
+        ws.send_text(json.dumps({"type": "stats"}))
+        msg = ws.receive_json()
+    v = msg["payload"]["visual"]
+    assert v["frames_received"] == 7
+    assert v["frames_buffered"] == 7
+    assert v["active"] is True
+
+
+def test_ws_visual_window_reaches_engine(client_mm, engine_mm):
+    """The regression test: engine.predict must receive a real visual window."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        for _ in range(10):
+            ws.send_bytes(_tagged(TAG_LANDMARKS, _landmark_frame()))
+        ws.send_bytes(_tagged(TAG_AUDIO, _pcm()))
+        ws.receive_json()
+
+    args, _ = engine_mm.predict.call_args
+    assert len(args) == 2, "predict() was called without a visual argument"
+    visual = args[1]
+    assert visual is not None, "visual window was None despite a live track"
+    assert visual.shape == (MAX_FRAMES, N_FACE_LANDMARKS * LANDMARK_COORDS)
+
+
+def test_ws_no_landmarks_means_none_not_zeros(client_mm, engine_mm):
+    """With no face track the engine gets None, so it can flag audio-only.
+
+    Passing a zero array here instead would be indistinguishable from a real
+    all-zero face and would silently claim the prediction was multimodal.
+    """
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        ws.send_bytes(_tagged(TAG_AUDIO, _pcm()))
+        ws.receive_json()
+
+    args, _ = engine_mm.predict.call_args
+    assert args[1] is None
+
+
+def test_ws_reset_clears_landmarks(client_mm):
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        for _ in range(4):
+            ws.send_bytes(_tagged(TAG_LANDMARKS, _landmark_frame()))
+        ws.send_text(json.dumps({"type": "reset"}))
+        ws.receive_json()                       # info: buffer cleared
+        ws.send_text(json.dumps({"type": "stats"}))
+        msg = ws.receive_json()
+    v = msg["payload"]["visual"]
+    assert v["frames_buffered"] == 0
+    assert v["active"] is False
+
+
+# --- malformed input ---
+
+
+def test_ws_bad_landmark_frame_reports_error_and_survives(client_mm):
+    """A truncated frame must not kill the connection."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        ws.send_bytes(_tagged(TAG_LANDMARKS, b"\x00" * 7))   # not a multiple of 3 floats
+        err = ws.receive_json()
+        assert err["type"] == "error"
+
+        ws.send_text(json.dumps({"type": "ping"}))           # still alive
+        assert "pong" in ws.receive_json()["payload"]["message"].lower()
+
+
+def test_ws_too_few_landmarks_rejected(client_mm):
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        ws.send_bytes(_tagged(TAG_LANDMARKS, _landmark_frame(n=10)))
+        err = ws.receive_json()
+    assert err["type"] == "error"
+    assert "landmark" in err["payload"]["message"].lower()
+
+
+def test_ws_extra_landmarks_accepted(client_mm):
+    """478-point browser output must feed a 468-point model."""
+    with client_mm.websocket_connect("/ws/stream") as ws:
+        _handshake(ws, tagged_binary=True, visual=True)
+        ws.send_bytes(_tagged(TAG_LANDMARKS, _landmark_frame(n=N_FACE_LANDMARKS + 10)))
+        ws.send_text(json.dumps({"type": "stats"}))
+        msg = ws.receive_json()
+    assert msg["type"] == "info"
+    assert msg["payload"]["visual"]["frames_received"] == 1

@@ -194,7 +194,7 @@ which `Conv2d` cannot accept. See [Fixed issues](#fixed-issues).
 `mel_spectrogram` and `mfcc_features` are imported from `src.features` — the same functions
 `preprocess.py` calls. This is the single most important line in the file for correctness.
 
-**`_zero_visual`** — a placeholder visual input for fusion models:
+**`_zero_visual`** — the fallback visual input for a fusion model with no live face track:
 
 ```python
 def _zero_visual(self):
@@ -206,14 +206,26 @@ def _zero_visual(self):
 `VisualLSTM` and `EmotionDataset` use, so the placeholder cannot drift from the model's input width.
 It was previously a literal `1404` here, in `builder.py`, and in `datasets.py`.
 
-There is no video ingestion path in the backend, so any fusion model is served with an all-zero visual
-tensor. **A fusion checkpoint therefore runs effectively audio-only at serve time**, and its evaluation
-accuracy does not describe its served accuracy. For `decision_level` the degradation is at least
-interpretable — the visual branch's output for zero input, scaled by the learned `w₁`. For
-`feature_level` and `attention` the model is operating outside its training distribution.
+This is now a **fallback**, not the only path. `predict(audio, visual=...)` accepts a real
+`(max_frames, LANDMARK_DIM)` window streamed from a webcam
+([websocket-protocol.md](websocket-protocol.md#visual-streaming)), and `_zero_visual` is used only when
+no live face track exists.
 
-If you serve a fusion model, evaluate it with the visual input zeroed to get the honest figure. See
-[evaluation.md](../evaluation.md#what-is-not-measured).
+The distinction is reported rather than hidden:
+
+| condition | `visual_active` | `modalities` |
+|---|---|---|
+| fusion model, live face track | `true` | `["audio", "visual"]` |
+| fusion model, no/stale track | `false` | `["audio"]` |
+| unimodal model | `false` | `["audio"]` |
+
+That matters because a fusion model on a zero visual tensor is operating outside its training
+distribution, and its evaluation accuracy does not describe that condition. For `decision_level` the
+degradation is at least interpretable — the visual branch's output for zero input, scaled by the
+learned `w₁`. For `feature_level` and `attention` it is not.
+
+So if you serve a fusion model where no camera is available, evaluate it with the visual input zeroed
+to get the honest figure. See [evaluation.md](../evaluation.md#what-is-not-measured).
 
 ### Latency measurement
 

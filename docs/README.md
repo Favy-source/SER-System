@@ -24,6 +24,7 @@ overwhelm it.
 
 1. [frontend/README.md](frontend/README.md) — stack and file map
 2. [frontend/audio-pipeline.md](frontend/audio-pipeline.md) — microphone to WebSocket
+3. [frontend/video-pipeline.md](frontend/video-pipeline.md) — webcam to landmark frames
 3. [backend/websocket-protocol.md](backend/websocket-protocol.md) — the wire format you must honour
 4. [frontend/components.md](frontend/components.md) — component contracts
 
@@ -47,7 +48,7 @@ overwhelm it.
 | [models.md](models.md) | All six architectures with layer-by-layer tensor traces |
 | [training.md](training.md) | Training loop, hyperparameters, checkpoint format, monitoring |
 | [evaluation.md](evaluation.md) | Metrics, confusion matrices, latency benchmark methodology |
-| [testing.md](testing.md) | All 127 tests explained, fixtures, how to add more |
+| [testing.md](testing.md) | All 166 tests explained, fixtures, how to add more |
 
 Landmark geometry and the audio feature height are defined once in
 [`src/constants.py`](../src/constants.py) and [`feature_height`](../src/models/builder.py); every
@@ -70,6 +71,7 @@ consumer imports them rather than hard-coding a number.
 | [frontend/README.md](frontend/README.md) | Stack, file map, dev workflow, production build |
 | [frontend/components.md](frontend/components.md) | Props, state, and rendering logic for every component |
 | [frontend/audio-pipeline.md](frontend/audio-pipeline.md) | getUserMedia → AudioWorklet → WebSocket, plus the fallback |
+| [frontend/video-pipeline.md](frontend/video-pipeline.md) | Webcam → MediaPipe FaceLandmarker → landmark frames on the wire |
 | [frontend/state-management.md](frontend/state-management.md) | `useStream` state machine, refs, cleanup, caveats |
 | [frontend/styling.md](frontend/styling.md) | Design tokens, layout, animations, theming |
 

@@ -10,6 +10,7 @@ import io
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -88,16 +89,40 @@ class InferenceEngine:
     # Public prediction API
     # ------------------------------------------------------------------
 
-    def predict(self, audio: np.ndarray) -> dict:
-        """Run inference on a raw float32 mono PCM array (any length)."""
+    def _visual_tensor(self, visual: np.ndarray) -> torch.Tensor:
+        """Validate and shape a (max_frames, LANDMARK_DIM) landmark window."""
+        expected = (self.cfg["visual"]["max_frames"], LANDMARK_DIM)
+        arr = np.asarray(visual, dtype=np.float32)
+        if arr.shape != expected:
+            raise ValueError(
+                f"visual window has shape {arr.shape}, expected {expected}"
+            )
+        return torch.from_numpy(arr).float().unsqueeze(0).to(self.device)
+
+    def predict(self, audio: np.ndarray, visual: Optional[np.ndarray] = None) -> dict:
+        """Run inference on a raw float32 mono PCM array (any length).
+
+        `visual` is an optional (max_frames, LANDMARK_DIM) normalised landmark
+        window. It is used only by fusion models; unimodal audio models ignore
+        it. When a fusion model is given no visual window it falls back to a
+        zero tensor, and the returned `visual_active` flag is False — so a
+        caller can always tell whether the prediction was genuinely multimodal
+        or audio-only wearing a multimodal model.
+        """
         t0 = time.perf_counter()
 
         audio = self._pad_or_crop(audio.astype(np.float32))
         tensor = self._to_tensor(audio)
 
+        visual_active = False
         with torch.no_grad():
             if self.multimodal:
-                logits = self.model(tensor, self._zero_visual())
+                if visual is not None:
+                    v = self._visual_tensor(visual)
+                    visual_active = True
+                else:
+                    v = self._zero_visual()
+                logits = self.model(tensor, v)
             else:
                 logits = self.model(tensor)
             probs = F.softmax(logits, dim=1)[0].cpu().numpy()
@@ -105,12 +130,18 @@ class InferenceEngine:
         idx     = int(probs.argmax())
         latency = (time.perf_counter() - t0) * 1000
 
+        modalities = ["audio"]
+        if visual_active:
+            modalities.append("visual")
+
         return {
             "emotion":       IDX2LABEL[idx],
             "confidence":    round(float(probs[idx]), 4),
             "probabilities": {e: round(float(probs[i]), 4) for i, e in enumerate(UNIFIED)},
             "latency_ms":    round(latency, 2),
             "model_name":    self.model_name,
+            "modalities":    modalities,
+            "visual_active": visual_active,
         }
 
     def predict_from_bytes(self, audio_bytes: bytes) -> dict:

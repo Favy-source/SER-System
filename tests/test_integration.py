@@ -295,3 +295,358 @@ def test_inference_engine_mfcc_checkpoint(tmp_path):
     assert tensor.shape == (1, 1, feature_height(CFG, "mfcc"), n_frames(CFG))
 
     assert engine.predict(audio)["emotion"] in UNIFIED
+
+
+# ── Real multimodal serving: does vision actually contribute? ──
+#
+# The whole point of the visual path. Before it existed, fusion checkpoints were
+# served with a zero visual tensor, so a "multimodal" prediction was audio-only
+# in everything but name. Mocked API tests cannot catch that — they assert the
+# plumbing, not that the model's output depends on the visual input. These use
+# real models.
+
+def _sine(seconds=3.0):
+    sr = CFG["audio"]["sample_rate"]
+    t = np.linspace(0, seconds, int(sr*seconds), endpoint=False)
+    return (0.4*np.sin(2*np.pi*440*t)).astype(np.float32)
+
+
+def _engine_for(tmp_path, model_name, feature="mel"):
+    from backend.inference import InferenceEngine
+    torch.manual_seed(0)
+    model = build_model(model_name, CFG, N_CLASSES, feature)
+    ckpt = tmp_path / f"{model_name}.pt"
+    torch.save({"epoch":1,"model":model.state_dict(),"val_loss":1.0,"val_acc":0.5,
+                "model_name":model_name,"feature":feature,"cfg":CFG}, ckpt)
+    return InferenceEngine(str(ckpt), "config/settings.yaml")
+
+
+def _landmark_window(seed=0):
+    rng = np.random.default_rng(seed)
+    from src.features import normalize_landmarks
+    frames = [normalize_landmarks(rng.random((N_FACE_LANDMARKS, 3)).astype(np.float32))
+              for _ in range(CFG["visual"]["max_frames"])]
+    return np.stack(frames).astype(np.float32)
+
+
+@pytest.mark.parametrize("model_name", FUSION_MODELS)
+def test_visual_input_changes_fusion_prediction(tmp_path, model_name):
+    """A real landmark window must alter a fusion model's output.
+
+    If this fails, the visual branch is not wired into the forward pass and the
+    model is effectively audio-only regardless of what it reports.
+    """
+    eng = _engine_for(tmp_path, model_name)
+    audio = _sine()
+
+    without = eng.predict(audio)                              # zero-filled visual
+    with_v  = eng.predict(audio, _landmark_window(seed=1))
+
+    assert without["visual_active"] is False
+    assert with_v["visual_active"] is True
+    assert without["modalities"] == ["audio"]
+    assert with_v["modalities"] == ["audio", "visual"]
+
+    a = np.array([without["probabilities"][e] for e in UNIFIED])
+    b = np.array([with_v["probabilities"][e]  for e in UNIFIED])
+    assert not np.allclose(a, b, atol=1e-6), (
+        f"{model_name}: visual input did not change the output — branch not wired"
+    )
+
+
+@pytest.mark.parametrize("model_name", FUSION_MODELS)
+def test_different_faces_give_different_predictions(tmp_path, model_name):
+    """Two different landmark windows must not collapse to the same output."""
+    eng = _engine_for(tmp_path, model_name)
+    audio = _sine()
+    p1 = eng.predict(audio, _landmark_window(seed=1))["probabilities"]
+    p2 = eng.predict(audio, _landmark_window(seed=2))["probabilities"]
+    a = np.array([p1[e] for e in UNIFIED]); b = np.array([p2[e] for e in UNIFIED])
+    assert not np.allclose(a, b, atol=1e-6)
+
+
+def test_unimodal_model_ignores_visual(tmp_path):
+    """An audio-only model must not claim vision, even if handed a window."""
+    eng = _engine_for(tmp_path, "audio_cnn_lstm")
+    r = eng.predict(_sine(), _landmark_window())
+    assert r["visual_active"] is False
+    assert r["modalities"] == ["audio"]
+
+
+def test_engine_rejects_wrong_visual_shape(tmp_path):
+    eng = _engine_for(tmp_path, "attention")
+    with pytest.raises(ValueError, match="shape"):
+        eng.predict(_sine(), np.zeros((10, LANDMARK_DIM), dtype=np.float32))
+    with pytest.raises(ValueError, match="shape"):
+        eng.predict(_sine(), np.zeros((CFG["visual"]["max_frames"], 99), dtype=np.float32))
+
+
+# ── VisualStreamBuffer behaviour ──────────────────────────
+
+
+def test_visual_buffer_window_shape_and_padding():
+    from backend.stream import VisualStreamBuffer
+    mf = CFG["visual"]["max_frames"]
+    b = VisualStreamBuffer(max_frames=mf)
+    rng = np.random.default_rng(0)
+    for _ in range(5):
+        b.push(rng.random((N_FACE_LANDMARKS, 3)).astype(np.float32))
+    w = b.window()
+    assert w.shape == (mf, LANDMARK_DIM)
+    assert not np.allclose(w[:5], 0), "real frames should be non-zero"
+    assert np.allclose(w[5:], 0), "short tracks pad at the END, as in training"
+
+
+def test_visual_buffer_keeps_newest_frames():
+    from backend.stream import VisualStreamBuffer
+    mf = 10
+    b = VisualStreamBuffer(max_frames=mf)
+    for i in range(mf + 7):
+        coords = np.full((N_FACE_LANDMARKS, 3), float(i) + 1.0, dtype=np.float32)
+        coords[0] += 1.0                       # break the degenerate all-equal case
+        b.push(coords)
+    assert b.stats()["frames_buffered"] == mf
+    assert b.stats()["frames_received"] == mf + 7
+
+
+def test_visual_buffer_goes_stale():
+    from backend.stream import VisualStreamBuffer
+    b = VisualStreamBuffer(max_frames=75, stale_after=0.0)
+    b.push(np.random.rand(N_FACE_LANDMARKS, 3).astype(np.float32))
+    import time; time.sleep(0.01)
+    assert b.is_active() is False
+    assert b.window() is None, "a stale face track must not be fed to the model"
+
+
+def test_visual_buffer_empty_window_is_none():
+    from backend.stream import VisualStreamBuffer
+    assert VisualStreamBuffer(max_frames=75).window() is None
+
+
+def test_visual_buffer_truncates_extra_landmarks():
+    """478-point browser output feeds a 468-point model."""
+    from backend.stream import VisualStreamBuffer
+    b = VisualStreamBuffer(max_frames=75)
+    b.push(np.random.rand(N_FACE_LANDMARKS + 10, 3).astype(np.float32))
+    assert b.window().shape == (75, LANDMARK_DIM)
+
+
+def test_audio_buffer_pulls_visual_window(tmp_path):
+    """Audio drives the clock and must hand the visual window to the engine."""
+    from backend.stream import AudioStreamBuffer, VisualStreamBuffer
+    eng = _engine_for(tmp_path, "attention")
+    vb = VisualStreamBuffer(max_frames=CFG["visual"]["max_frames"])
+    for _ in range(20):
+        vb.push(np.random.rand(N_FACE_LANDMARKS, 3).astype(np.float32))
+    ab = AudioStreamBuffer(eng, input_sr=16000, visual=vb)
+    r = ab.push(np.zeros(16000 * 4, dtype=np.float32).tobytes())
+    assert r is not None and "_error" not in r
+    assert r["visual_active"] is True
+
+    ab2 = AudioStreamBuffer(eng, input_sr=16000, visual=None)
+    r2 = ab2.push(np.zeros(16000 * 4, dtype=np.float32).tobytes())
+    assert r2["visual_active"] is False
+
+
+# ── Normalisation is shared, not reimplemented ────────────
+
+
+def test_normalize_landmarks_is_translation_invariant():
+    from src.features import normalize_landmarks
+    rng = np.random.default_rng(3)
+    c = rng.random((N_FACE_LANDMARKS, 3)).astype(np.float32)
+    shifted = c + np.array([5.0, -3.0, 2.0], dtype=np.float32)
+    assert np.allclose(normalize_landmarks(c), normalize_landmarks(shifted), atol=1e-5)
+
+
+def test_normalize_landmarks_is_scale_invariant():
+    from src.features import normalize_landmarks
+    rng = np.random.default_rng(4)
+    c = rng.random((N_FACE_LANDMARKS, 3)).astype(np.float32)
+    assert np.allclose(normalize_landmarks(c), normalize_landmarks(c * 7.5), atol=1e-5)
+
+
+def test_normalize_landmarks_output_width():
+    from src.features import normalize_landmarks
+    c = np.random.rand(N_FACE_LANDMARKS, 3).astype(np.float32)
+    assert normalize_landmarks(c).shape == (LANDMARK_DIM,)
+
+
+def test_normalize_landmarks_rejects_bad_input():
+    from src.features import normalize_landmarks
+    with pytest.raises(ValueError):
+        normalize_landmarks(np.random.rand(N_FACE_LANDMARKS, 2).astype(np.float32))
+    with pytest.raises(ValueError):
+        normalize_landmarks(np.random.rand(10, 3).astype(np.float32))
+
+
+def test_normalize_landmarks_handles_degenerate_frame():
+    """All-identical points would divide by zero without the epsilon guard."""
+    from src.features import normalize_landmarks
+    out = normalize_landmarks(np.ones((N_FACE_LANDMARKS, 3), dtype=np.float32))
+    assert not np.isnan(out).any()
+
+
+# ── End-to-end: real engine over the real WebSocket app ────
+#
+# The API tests mock the engine, so they verify plumbing but cannot show that a
+# prediction's output actually depends on the landmarks that were streamed.
+# These use a real fusion checkpoint through the real FastAPI app.
+
+def _save_ckpt(tmp_path, model_name, feature="mel"):
+    torch.manual_seed(0)
+    model = build_model(model_name, CFG, N_CLASSES, feature)
+    p = tmp_path / f"{model_name}.pt"
+    torch.save({"epoch":1,"model":model.state_dict(),"val_loss":1.0,"val_acc":0.5,
+                "model_name":model_name,"feature":feature,"cfg":CFG}, p)
+    return p
+
+
+def _real_client(tmp_path, model_name):
+    from fastapi.testclient import TestClient
+    from backend.inference import InferenceEngine
+    from unittest.mock import patch
+    import backend.main as bm
+    ckpt = _save_ckpt(tmp_path, model_name)
+    eng = InferenceEngine(str(ckpt), "config/settings.yaml")
+    return patch.object(bm, "_load_engine", return_value=eng), bm.app, eng
+
+
+def _tag(tag, payload):
+    import struct
+    return struct.pack("<Bxxx", tag) + payload
+
+
+def _raw_landmarks(seed=0):
+    rng = np.random.default_rng(seed)
+    return rng.random((N_FACE_LANDMARKS, 3)).astype(np.float32).tobytes()
+
+
+def test_e2e_websocket_multimodal_prediction(tmp_path):
+    """Stream landmarks + audio to the real app and confirm vision was used."""
+    from fastapi.testclient import TestClient
+    import json
+    patcher, app, _ = _real_client(tmp_path, "attention")
+    with patcher, TestClient(app) as c:
+        with c.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"sample_rate": 16000,
+                                     "tagged_binary": True, "visual": True}))
+            ready = ws.receive_json()
+            assert ready["payload"]["visual_enabled"] is True
+
+            for i in range(30):
+                ws.send_bytes(_tag(1, _raw_landmarks(i)))
+            ws.send_bytes(_tag(0, np.zeros(16000 * 4, dtype=np.float32).tobytes()))
+            msg = ws.receive_json()
+
+    assert msg["type"] == "prediction"
+    p = msg["payload"]
+    assert p["visual_active"] is True
+    assert p["modalities"] == ["audio", "visual"]
+    assert p["emotion"] in UNIFIED
+    assert abs(sum(p["probabilities"].values()) - 1.0) < 0.02
+
+
+def test_e2e_websocket_audio_only_when_no_face(tmp_path):
+    """Same model, same audio, no landmarks -> honestly reported as audio-only."""
+    from fastapi.testclient import TestClient
+    import json
+    patcher, app, _ = _real_client(tmp_path, "attention")
+    with patcher, TestClient(app) as c:
+        with c.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"sample_rate": 16000,
+                                     "tagged_binary": True, "visual": True}))
+            ws.receive_json()
+            ws.send_bytes(_tag(0, np.zeros(16000 * 4, dtype=np.float32).tobytes()))
+            p = ws.receive_json()["payload"]
+
+    assert p["visual_active"] is False
+    assert p["modalities"] == ["audio"]
+
+
+def test_e2e_landmarks_change_the_streamed_prediction(tmp_path):
+    """The end-to-end version of the claim: streamed faces move the output.
+
+    Identical audio, one run with landmarks and one without, must not produce
+    identical probabilities — otherwise the visual stream is decorative.
+    """
+    from fastapi.testclient import TestClient
+    import json
+    audio = np.zeros(16000 * 4, dtype=np.float32).tobytes()
+
+    def run(with_face):
+        patcher, app, _ = _real_client(tmp_path, "attention")
+        with patcher, TestClient(app) as c:
+            with c.websocket_connect("/ws/stream") as ws:
+                ws.send_text(json.dumps({"sample_rate": 16000,
+                                         "tagged_binary": True, "visual": True}))
+                ws.receive_json()
+                if with_face:
+                    for i in range(30):
+                        ws.send_bytes(_tag(1, _raw_landmarks(i)))
+                ws.send_bytes(_tag(0, audio))
+                return ws.receive_json()["payload"]["probabilities"]
+
+    a = np.array([run(False)[e] for e in UNIFIED])
+    b = np.array([run(True)[e]  for e in UNIFIED])
+    assert not np.allclose(a, b, atol=1e-6), "streamed landmarks had no effect"
+
+
+def test_e2e_unimodal_checkpoint_refuses_visual(tmp_path):
+    """An audio-only checkpoint must decline visual regardless of the request."""
+    from fastapi.testclient import TestClient
+    import json
+    patcher, app, _ = _real_client(tmp_path, "audio_cnn_lstm")
+    with patcher, TestClient(app) as c:
+        with c.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"sample_rate": 16000,
+                                     "tagged_binary": True, "visual": True}))
+            payload = ws.receive_json()["payload"]
+    assert payload["visual_enabled"] is False
+    assert payload["multimodal_model"] is False
+
+
+def test_visual_freshness_survives_slow_inference():
+    """Server compute must not age the face track.
+
+    Regression: the visual window was read AFTER resampling, so the freshness
+    check included our own latency. The first inference pays a multi-second
+    lazy `import librosa`, which pushed a live track past stale_after and
+    silently degraded the prediction to audio-only.
+    """
+    import time
+    from backend.stream import AudioStreamBuffer, VisualStreamBuffer
+
+    class SlowEngine:
+        sr = 22050
+        def predict(self, audio, visual=None):
+            time.sleep(0.3)                        # slow forward pass
+            return {"visual_active": visual is not None}
+
+    vb = VisualStreamBuffer(max_frames=75, stale_after=0.2)
+    for _ in range(20):
+        vb.push(np.random.rand(N_FACE_LANDMARKS, 3).astype(np.float32))
+
+    ab = AudioStreamBuffer(SlowEngine(), input_sr=22050, visual=vb)
+    first = ab.push(np.zeros(22050 * 4, dtype=np.float32).tobytes())
+    assert first["visual_active"] is True, "slow inference aged a live face track"
+
+
+def test_visual_track_still_goes_stale_when_abandoned():
+    """The freshness check must still work — the fix must not disable it."""
+    import time
+    from backend.stream import AudioStreamBuffer, VisualStreamBuffer
+
+    class Engine:
+        sr = 22050
+        def predict(self, audio, visual=None):
+            return {"visual_active": visual is not None}
+
+    vb = VisualStreamBuffer(max_frames=75, stale_after=0.05)
+    for _ in range(20):
+        vb.push(np.random.rand(N_FACE_LANDMARKS, 3).astype(np.float32))
+    time.sleep(0.1)                                # client stopped sending
+
+    ab = AudioStreamBuffer(Engine(), input_sr=22050, visual=vb)
+    r = ab.push(np.zeros(22050 * 4, dtype=np.float32).tobytes())
+    assert r["visual_active"] is False, "an abandoned face track was still used"

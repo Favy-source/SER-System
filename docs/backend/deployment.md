@@ -484,8 +484,11 @@ format field in the handshake and a conversion server-side.
 - [ ] `/health` reports `model_loaded: true`
 - [ ] `POST /predict/audio` returns a sensible prediction for a known file
 - [ ] A WebSocket client receives predictions after ~3 seconds
-- [ ] If serving a fusion model, you have accepted that it runs effectively audio-only
+- [ ] If serving a fusion model, either a webcam client is streaming landmarks, or you have accepted
+      that it runs audio-only on a zero visual tensor
       ([why](inference-engine.md#internal-helpers))
+- [ ] `frontend/public/mediapipe/` populated if the front end needs face tracking
+      (`npm run setup:mediapipe`)
 
 **Configuration**
 

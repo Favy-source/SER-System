@@ -1,5 +1,5 @@
-from typing import Dict, Optional
-from pydantic import BaseModel
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field
 
 
 class PredictionResult(BaseModel):
@@ -8,6 +8,13 @@ class PredictionResult(BaseModel):
     probabilities: Dict[str, float]
     latency_ms: float
     model_name: str
+
+    # Which modalities actually contributed to THIS prediction. A fusion model
+    # served without a live face track still predicts, but on a zero visual
+    # tensor — so its accuracy is not the accuracy it was evaluated at. These
+    # two fields make that visible instead of silent.
+    modalities: List[str] = Field(default_factory=lambda: ["audio"])
+    visual_active: bool = False
 
 
 class HealthResponse(BaseModel):

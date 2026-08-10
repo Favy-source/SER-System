@@ -1,6 +1,6 @@
 # Testing
 
-127 tests across five modules, all passing in ~32 s on CPU with no corpora, no checkpoints, and no GPU.
+166 tests across five modules, all passing in ~31 s on CPU with no corpora, no checkpoints, and no GPU.
 
 - [Running the suite](#running-the-suite)
 - [Design principles](#design-principles)
@@ -8,8 +8,8 @@
 - [test_features.py](#test_featurespy--16-tests)
 - [test_datasets.py](#test_datasetspy--33-tests)
 - [test_model.py](#test_modelpy--29-tests)
-- [test_api.py](#test_apipy--20-tests)
-- [test_integration.py](#test_integrationpy--29-tests)
+- [test_api.py](#test_apipy--34-tests)
+- [test_integration.py](#test_integrationpy--54-tests)
 - [Coverage gaps](#coverage-gaps)
 - [Adding tests](#adding-tests)
 
@@ -18,7 +18,7 @@
 ## Running the suite
 
 ```bash
-python3 -m pytest                          # all 127
+python3 -m pytest                          # all 166
 python3 -m pytest tests/test_model.py      # one module
 python3 -m pytest -k websocket             # by name substring
 python3 -m pytest -k "not api"             # exclude
@@ -50,13 +50,13 @@ periodically to see them (that is how the `torch.cuda.amp.GradScaler` deprecatio
 Expected:
 
 ```
-collected 127 items
-tests/test_api.py ....................                   [ 15%]
-tests/test_datasets.py .................................  [ 41%]
-tests/test_features.py ................                   [ 54%]
-tests/test_integration.py .............................   [ 77%]
-tests/test_model.py .............................         [100%]
-============ 127 passed in 32.66s ============
+collected 166 items
+tests/test_api.py ..................................      [ 20%]
+tests/test_datasets.py .................................   [ 40%]
+tests/test_features.py ................                    [ 50%]
+tests/test_integration.py ..................................................  [ 82%]
+tests/test_model.py .............................          [100%]
+============ 166 passed in 31.30s ============
 ```
 
 ---
@@ -70,7 +70,7 @@ synthesised from sine waves; dataset parsers are fed `touch()`ed empty files; th
 `MagicMock`ed. This is what makes the suite runnable in CI, on a fresh clone, and on a machine that has
 never had access to the licensed corpora.
 
-**2. Fast enough to run constantly.** ~32 s total. Small batch size (`B = 4`), CPU-only, no training
+**2. Fast enough to run constantly.** ~31 s total. Small batch size (`B = 4`), CPU-only, no training
 loops. A suite you run before every commit has to be a suite you do not mind waiting for.
 
 **3. Properties, not values.** The tests assert structural and invariant properties — shapes, disjointness,
@@ -266,7 +266,7 @@ multimodal training. Without the zero-fill, MSP-IMPROV could not participate at 
 
 The MFCC loading path used to be covered by nothing — extraction was tested in `test_features.py` and
 mel loading here, but never MFCC loading feeding a model. That gap is now covered in
-[test_integration.py](#test_integrationpy--29-tests).
+[test_integration.py](#test_integrationpy--54-tests).
 
 ---
 
@@ -341,7 +341,7 @@ mean.
 
 ---
 
-## test_api.py — 20 tests
+## test_api.py — 34 tests
 
 HTTP endpoints and WebSocket streaming. [`tests/test_api.py`](../tests/test_api.py)
 
@@ -423,7 +423,7 @@ The mocked engine has `sr = 22050` while the handshake declares 16000, so the re
 
 ---
 
-## test_integration.py — 29 tests
+## test_integration.py — 54 tests
 
 Cross-stage contract tests. [`tests/test_integration.py`](../tests/test_integration.py)
 
@@ -598,3 +598,66 @@ Test both — the no-model path is a real state this system spends time in.
   bugs actually live.
 - **Keep it fast.** If a test takes more than a second, ask whether a smaller input would prove the same
   thing.
+
+
+---
+
+## Visual streaming coverage
+
+Added with the webcam path. 14 tests in `test_api.py` and 28 in `test_integration.py`.
+
+### Protocol negotiation and framing (`test_api.py`, 14)
+
+| Test | Asserts |
+|---|---|
+| `test_ws_visual_disabled_by_default` | Opt-in only — a plain handshake does not enable visual |
+| `test_ws_visual_enabled_when_requested` | `visual_enabled`, `max_frames`, `expected_landmarks` in `ready` |
+| `test_ws_visual_refused_for_unimodal_model` | An audio-only checkpoint cannot use vision |
+| `test_ws_visual_requires_tagged_binary` | Without tagging there is no way to distinguish frame types |
+| `test_ws_untagged_audio_still_works` | **Legacy clients are unaffected** |
+| `test_ws_tagged_audio_produces_prediction` | Tagged audio still triggers inference |
+| `test_ws_landmarks_do_not_trigger_inference` | Audio drives the clock |
+| `test_ws_landmarks_are_buffered` | Frames accumulate and report via `stats` |
+| `test_ws_visual_window_reaches_engine` | **`predict()` receives a real window, not `None`** |
+| `test_ws_no_landmarks_means_none_not_zeros` | No track → `None`, so audio-only is reportable |
+| `test_ws_reset_clears_landmarks` | `reset` clears the visual buffer too |
+| `test_ws_bad_landmark_frame_reports_error_and_survives` | A truncated frame does not kill the connection |
+| `test_ws_too_few_landmarks_rejected` | Undersized frames are refused |
+| `test_ws_extra_landmarks_accepted` | 478-point browser output feeds a 468-point model |
+
+### Real models and real sockets (`test_integration.py`, 28)
+
+The mocked API tests verify plumbing but cannot show that the output *depends* on the landmarks. These
+use real checkpoints and the real FastAPI app:
+
+| Test | Asserts |
+|---|---|
+| `test_visual_input_changes_fusion_prediction` (×3 fusion models) | **A landmark window alters the output** — if not, the branch is not wired |
+| `test_different_faces_give_different_predictions` (×3) | Two different faces do not collapse to one output |
+| `test_unimodal_model_ignores_visual` | An audio-only model never claims vision |
+| `test_engine_rejects_wrong_visual_shape` | Wrong shapes raise rather than silently broadcasting |
+| `test_e2e_websocket_multimodal_prediction` | Full socket path reports `["audio","visual"]` |
+| `test_e2e_websocket_audio_only_when_no_face` | Same model, no landmarks → `["audio"]` |
+| `test_e2e_landmarks_change_the_streamed_prediction` | End-to-end: streamed faces move the output |
+| `test_e2e_unimodal_checkpoint_refuses_visual` | Negotiation refuses correctly with a real checkpoint |
+| `test_visual_buffer_*` (5) | Window shape, end-padding, newest-frames-kept, staleness, truncation |
+| `test_audio_buffer_pulls_visual_window` | Audio buffer hands the window to the engine |
+| `test_normalize_landmarks_*` (5) | Translation and scale invariance, output width, bad input, degenerate frame |
+
+### The bug the mocks could not catch
+
+`test_visual_freshness_survives_slow_inference` exists because the real-engine test found something the
+14 mocked protocol tests could not: the visual window was read **after** resampling, so the freshness
+check included the server's own latency. The first inference pays a multi-second lazy `import librosa`,
+which aged a live face track past `stale_after` and silently degraded every first prediction to
+audio-only.
+
+The fix samples the visual window at the instant the audio window closes, before any expensive work.
+Two tests pin both halves of the behaviour:
+
+- `test_visual_freshness_survives_slow_inference` — a 0.3 s forward pass must not age a live track
+- `test_visual_track_still_goes_stale_when_abandoned` — but a genuinely abandoned track still expires
+
+This is the clearest instance of the general lesson in [Coverage gaps](#coverage-gaps): a mock reproduces
+the interface you imagined, so it cannot falsify an assumption baked into that interface. Only real
+components on both sides of a boundary can.

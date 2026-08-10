@@ -1,7 +1,8 @@
 # Front end
 
-React 18 + Vite client. Captures microphone audio, streams it to the backend over a WebSocket, and
-renders live emotion predictions. Also supports drag-and-drop file analysis.
+React 18 + Vite client. Captures microphone audio and — optionally — webcam face landmarks, streams
+both to the backend over one WebSocket, and renders live emotion predictions. Also supports
+drag-and-drop file analysis.
 
 - [Stack](#stack)
 - [File map](#file-map)
@@ -21,20 +22,23 @@ renders live emotion predictions. Also supports drag-and-drop file analysis.
 | Dependency | Version | Role |
 |---|---|---|
 | `react` | ^18.2.0 | UI |
+| `@mediapipe/tasks-vision` | ^1.0.1 | Webcam face-landmark extraction (dynamically imported) |
 | `react-dom` | ^18.2.0 | DOM rendering |
 | `vite` | ^4.4.5 | Dev server and bundler |
 | `@vitejs/plugin-react` | ^4.0.0 | JSX transform, HMR |
 
-Four packages. No UI framework, no state library, no CSS framework, no router, no test runner.
+Five packages. No UI framework, no state library, no CSS framework, no router, no test runner.
 
 That is a deliberate choice rather than an omission. The app is one screen with a handful of components
 and one genuinely stateful concern (the audio stream). Redux or Zustand would add indirection around a
 single custom hook; Tailwind or MUI would add a build step and a dependency to style ~340 lines of CSS.
-The whole front end is 11 source files and roughly 800 lines including styles, which one person can read
-in a sitting.
+The whole front end is 14 source files and roughly 1,330 lines including styles, which one person can
+read in a sitting.
 
-The one place this trade bites is testing — there is no test runner, so the front end has zero automated
-coverage. See [Known limitations](#known-limitations).
+The one place this trade bites is testing — there is no JS test runner, so components and hooks have no
+unit coverage. Page rendering is verified headlessly and the visual *protocol* is covered by Python
+tests against the real app, but that is not the same thing. See
+[Known limitations](#known-limitations).
 
 ---
 
@@ -43,9 +47,14 @@ coverage. See [Known limitations](#known-limitations).
 ```
 frontend/
 ├── index.html                      Vite entry; mounts #root
-├── package.json                    4 dependencies
+├── package.json                    5 dependencies + setup:mediapipe script
 ├── vite.config.js                  dev server :3000, /api proxy
+├── scripts/
+│   └── setup-mediapipe.mjs          vendors WASM + face model into public/
 ├── public/
+│   ├── mediapipe/                   gitignored; created by setup-mediapipe
+│   │   ├── wasm/                    ~34 MB, copied from node_modules
+│   │   └── models/                  face_landmarker.task, ~3.6 MB, downloaded
 │   └── worklets/
 │       └── pcm-processor.js         AudioWorkletProcessor — served as a static asset
 └── src/
@@ -54,10 +63,12 @@ frontend/
     ├── constants.js                emotion labels, colours, emoji
     ├── index.css                   design tokens + every component style
     ├── hooks/
-    │   └── useStream.js            the streaming state machine
+    │   ├── useStream.js            the streaming state machine
+    │   └── useFaceTracking.js      webcam -> MediaPipe FaceLandmarker -> raw landmarks
     └── components/
         ├── Header.jsx              title + status dot
         ├── AudioCapture.jsx        mic button + drop zone
+        ├── VideoCapture.jsx        webcam preview + face-tracking state
         ├── EmotionDisplay.jsx      dominant emotion
         ├── ProbabilityBars.jsx     six probability bars
         └── Timeline.jsx            scrolling emoji history
@@ -65,9 +76,12 @@ frontend/
 
 | File | Lines | Responsibility |
 |---|---:|---|
-| [`index.css`](../../frontend/src/index.css) | 338 | All styling — tokens, layout, components, animations, responsive |
-| [`useStream.js`](../../frontend/src/hooks/useStream.js) | 126 | Mic → AudioContext → WebSocket → prediction state, plus teardown |
-| [`App.jsx`](../../frontend/src/App.jsx) | 102 | Composition, `/health` polling, file upload, prediction precedence |
+| [`index.css`](../../frontend/src/index.css) | 415 | All styling — tokens, layout, components, animations, responsive |
+| [`useStream.js`](../../frontend/src/hooks/useStream.js) | 182 | Mic → AudioContext → WebSocket → prediction state, tagged frames, teardown |
+| [`useFaceTracking.js`](../../frontend/src/hooks/useFaceTracking.js) | 159 | Webcam → MediaPipe FaceLandmarker → raw landmark frames |
+| [`App.jsx`](../../frontend/src/App.jsx) | 156 | Composition, `/health` polling, file upload, prediction precedence, camera lifecycle |
+| [`VideoCapture.jsx`](../../frontend/src/components/VideoCapture.jsx) | 80 | Webcam preview, face-tracking status, modality disclosure |
+| [`setup-mediapipe.mjs`](../../frontend/scripts/setup-mediapipe.mjs) | 74 | Vendors the WASM runtime and face model |
 | [`AudioCapture.jsx`](../../frontend/src/components/AudioCapture.jsx) | 61 | Mic button state, drag-and-drop |
 | [`Timeline.jsx`](../../frontend/src/components/Timeline.jsx) | 52 | History chips, auto-scroll |
 | [`EmotionDisplay.jsx`](../../frontend/src/components/EmotionDisplay.jsx) | 42 | Emoji, label, confidence and latency chips |
@@ -180,6 +194,8 @@ One environment variable, read at **build time**:
 | Variable | Default | Purpose |
 |---|---|---|
 | `VITE_API_URL` | `http://localhost:8000` | Backend base URL |
+| `VITE_MEDIAPIPE_WASM` | `/mediapipe/wasm` | MediaPipe WASM directory — point at a CDN to skip vendoring |
+| `VITE_FACE_MODEL_URL` | `/mediapipe/models/face_landmarker.task` | Face landmark model |
 
 ```bash
 VITE_API_URL=http://192.168.1.50:8000 npm run dev
@@ -311,19 +327,11 @@ CSS-in-JS, no utility framework. See [styling.md](styling.md).
 `useStream`, which is the most intricate code in the app. Vitest plus React Testing Library for the
 components and a mocked WebSocket for the hook would be the natural addition.
 
-**`status` is stale inside the WebSocket callbacks.** `useStream`'s `start` is wrapped in
-`useCallback(…, [])` with the exhaustive-deps lint rule disabled, so the closures created inside it
-capture `status` from the first render — permanently `'idle'`. The `onclose` handler reads it:
-
-```javascript
-ws.onclose = () => { if (status !== 'error') setStatus('idle'); };
-```
-
-Since the captured `status` is always `'idle'`, the guard never fires, and a connection that errors will
-have its status overwritten back to `'idle'` when the socket subsequently closes. The user sees the error
-banner (which is separate state) but the mic button returns to its idle appearance. A ref, or a functional
-`setStatus(prev => …)`, would fix it. Details in
-[state-management.md](state-management.md#the-stale-status-closure).
+**~~`status` is stale inside the WebSocket callbacks.~~ Fixed.** `ws.onclose` used to read a `status`
+captured at first render (permanently `'idle'`), so its `!== 'error'` guard never fired and an errored
+connection was reset to idle on close. It now uses a functional update —
+`setStatus(prev => prev === 'error' ? prev : 'idle')` — which reads the current value without needing a
+ref. Details in [state-management.md](state-management.md).
 
 **No temporal smoothing.** Consecutive windows overlap by 83%, so predictions are highly correlated — but
 a borderline case flips labels between adjacent windows and the UI flickers. A short moving average over
@@ -369,6 +377,7 @@ adding a light theme is a media query away — see [styling.md](styling.md#themi
 |---|---|
 | [components.md](components.md) | Props, state, and rendering logic for every component |
 | [audio-pipeline.md](audio-pipeline.md) | getUserMedia → AudioWorklet → WebSocket in detail |
+| [video-pipeline.md](video-pipeline.md) | Webcam → FaceLandmarker → landmark frames, and why the server normalises |
 | [state-management.md](state-management.md) | `useStream` state machine, refs, cleanup, the stale-closure bug |
 | [styling.md](styling.md) | Design tokens, layout, animations, theming |
 | [../backend/websocket-protocol.md](../backend/websocket-protocol.md) | The wire format the client must honour |

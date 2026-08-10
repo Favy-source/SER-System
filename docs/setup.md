@@ -95,10 +95,18 @@ normally.
 ```bash
 cd frontend
 npm install
+npm run setup:mediapipe      # vendors the face-tracking assets (also runs automatically)
 ```
 
-Only four packages: `react`, `react-dom`, `vite`, `@vitejs/plugin-react`. No UI framework, no state
-library, no test runner.
+Five packages: `react`, `react-dom`, `vite`, `@vitejs/plugin-react`, and
+`@mediapipe/tasks-vision` for webcam face tracking. No UI framework, no state library, no test
+runner.
+
+`setup:mediapipe` copies the MediaPipe WASM runtime (~34 MB) out of `node_modules` and downloads
+`face_landmarker.task` (~3.6 MB) into `frontend/public/mediapipe/`, which is gitignored. It runs
+automatically before `npm run dev` and `npm run build`, is idempotent, and a failed download is
+non-fatal — face tracking is simply unavailable and the app runs audio-only. See
+[frontend/video-pipeline.md](frontend/video-pipeline.md#vendored-mediapipe-assets).
 
 ---
 
@@ -146,7 +154,7 @@ python3 -m pytest
 Expected:
 
 ```
-collected 127 items
+collected 166 items
 tests/test_api.py ....................            [ 15%]
 tests/test_datasets.py .................................  [ 41%]
 tests/test_features.py ................            [ 54%]

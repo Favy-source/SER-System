@@ -29,9 +29,17 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.constants import N_FACE_LANDMARKS
+
 from .inference import InferenceEngine
 from .schemas import HealthResponse, PredictionResult
-from .stream import AudioStreamBuffer
+from .stream import AudioStreamBuffer, VisualStreamBuffer
+
+# Binary frame tags, used only when the client sets "tagged_binary": true in the
+# handshake. Legacy clients send untagged PCM and keep working unchanged.
+TAG_AUDIO     = 0
+TAG_LANDMARKS = 1
+TAG_HEADER    = 4          # 1 tag byte + 3 reserved, so float32 stays 4-aligned
 
 
 # ---------------------------------------------------------------------------
@@ -171,12 +179,26 @@ async def ws_stream(ws: WebSocket):
 
     Protocol:
       1. Connect.
-      2. Client sends JSON text:   {"sample_rate": 16000}
+      2. Client sends JSON text:   {"sample_rate": 16000,
+                                    "tagged_binary": true,   (optional)
+                                    "visual": true}          (optional)
       3. Server responds:          {"type": "ready", "payload": {...}}
       4. Client sends PCM chunks:  raw float32 bytes (any chunk size)
       5. Server sends predictions: {"type": "prediction", "payload": {...}}
          whenever a full inference window has accumulated.
       6. Client can send text:     {"type": "reset"} to clear the buffer.
+
+    Visual streaming (opt-in via "tagged_binary" + "visual"):
+      Every binary frame gains a 4-byte header — byte 0 is the channel tag
+      (0 = audio PCM, 1 = face landmarks), bytes 1-3 reserved so the float32
+      payload stays 4-byte aligned. Landmark frames carry raw
+      n_landmarks * 3 float32 coordinates straight from the client's
+      FaceLandmarker; the server normalises them with the same
+      src.features.normalize_landmarks that the training pipeline uses, so no
+      normalisation logic is duplicated in JavaScript.
+
+      Clients that omit "tagged_binary" keep sending untagged PCM and are
+      unaffected.
     """
     await ws.accept()
 
@@ -186,14 +208,27 @@ async def ws_stream(ws: WebSocket):
         return
 
     # --- handshake ---
+    tagged = False
+    want_visual = False
     try:
         raw = await ws.receive_text()
         config = json.loads(raw)
         input_sr = int(config.get("sample_rate", 16000))
+        tagged = bool(config.get("tagged_binary", False))
+        want_visual = bool(config.get("visual", False))
     except Exception:
         input_sr = 16000
 
-    buf = AudioStreamBuffer(engine, input_sr=input_sr)
+    # Visual is only meaningful for a fusion checkpoint, and only reachable when
+    # the client opted into tagged frames — otherwise there is no way to tell a
+    # landmark frame from PCM.
+    visual_enabled = tagged and want_visual and engine.multimodal
+    vbuf = (
+        VisualStreamBuffer(max_frames=engine.cfg["visual"]["max_frames"])
+        if visual_enabled else None
+    )
+    buf = AudioStreamBuffer(engine, input_sr=input_sr, visual=vbuf)
+
     await ws.send_json({
         "type": "ready",
         "payload": {
@@ -201,6 +236,12 @@ async def ws_stream(ws: WebSocket):
             "model": engine.model_name,
             "window_sec": 3.0,
             "hop_sec": 0.5,
+            "tagged_binary": tagged,
+            # what the server will actually do, not what was asked for
+            "visual_enabled": visual_enabled,
+            "multimodal_model": engine.multimodal,
+            "max_frames": engine.cfg["visual"]["max_frames"],
+            "expected_landmarks": N_FACE_LANDMARKS,
         },
     })
 
@@ -210,7 +251,27 @@ async def ws_stream(ws: WebSocket):
             msg = await ws.receive()
 
             if "bytes" in msg and msg["bytes"]:
-                result = buf.push(msg["bytes"])
+                payload = msg["bytes"]
+                tag = TAG_AUDIO
+
+                if tagged:
+                    if len(payload) < TAG_HEADER:
+                        continue
+                    tag, payload = payload[0], payload[TAG_HEADER:]
+
+                if tag == TAG_LANDMARKS:
+                    if vbuf is None:
+                        continue          # client sent visual we did not enable
+                    try:
+                        vbuf.push_bytes(payload)
+                    except Exception as exc:
+                        await ws.send_json({
+                            "type": "error",
+                            "payload": {"message": f"bad landmark frame: {exc}"},
+                        })
+                    continue              # landmarks never trigger inference
+
+                result = buf.push(payload)
                 if result is None:
                     continue
                 if "_error" in result:
@@ -223,11 +284,22 @@ async def ws_stream(ws: WebSocket):
                     ctrl = json.loads(msg["text"])
                 except json.JSONDecodeError:
                     continue
-                if ctrl.get("type") == "reset":
+                ctype = ctrl.get("type")
+                if ctype == "reset":
                     buf.reset()
+                    if vbuf is not None:
+                        vbuf.reset()
                     await ws.send_json({"type": "info", "payload": {"message": "buffer cleared"}})
-                elif ctrl.get("type") == "ping":
+                elif ctype == "ping":
                     await ws.send_json({"type": "info", "payload": {"message": "pong"}})
+                elif ctype == "stats":
+                    await ws.send_json({
+                        "type": "info",
+                        "payload": {
+                            "message": "stats",
+                            "visual": vbuf.stats() if vbuf else None,
+                        },
+                    })
 
     except WebSocketDisconnect:
         pass

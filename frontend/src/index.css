@@ -336,3 +336,80 @@ body {
   .row { grid-template-columns: 1fr; }
   .app { padding: 16px 12px 32px; }
 }
+
+/* ── VideoCapture ───────────────────────────────────────── */
+.video-wrap { display: flex; flex-direction: column; gap: 10px; }
+
+.video-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.switch input { accent-color: var(--accent); cursor: pointer; }
+.switch:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+
+.video-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 260px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .2s;
+}
+.video-frame.live { border-color: var(--accent); }
+
+.video-el {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);        /* mirror for a natural self-view */
+}
+
+.video-placeholder {
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+  padding: 0 16px;
+}
+
+.video-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.video-note {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.video-note.error { color: var(--error); }
+
+/* Highlight when a prediction genuinely used both modalities */
+.mod-multi { color: var(--success); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -9,6 +9,7 @@
 - [Audio frames](#audio-frames)
 - [Server messages](#server-messages)
 - [Control messages](#control-messages)
+- [Visual streaming](#visual-streaming)
 - [Timing and buffering](#timing-and-buffering)
 - [Error handling](#error-handling)
 - [Complete client implementation](#complete-client-implementation)
@@ -23,7 +24,7 @@
 |---|---|
 | Endpoint | `/ws/stream` |
 | URL derivation | `API_URL.replace(/^http/, 'ws') + '/ws/stream'` — `https` → `wss` |
-| Client → server | One JSON text handshake, then binary float32 PCM frames; JSON text for control |
+| Client → server | One JSON text handshake, then binary float32 frames (PCM, and optionally face landmarks); JSON text for control |
 | Server → client | JSON text frames only, always `{"type": ..., "payload": {...}}` |
 | Audio format | Raw 32-bit float PCM, mono, native byte order, **no header** |
 | Chunk size | Any. The server buffers |
@@ -274,6 +275,148 @@ except json.JSONDecodeError:
 ```
 
 No error is returned for either, so a client with a typo in its control message gets no feedback.
+
+---
+
+## Visual streaming
+
+Opt-in, and off unless three conditions all hold: the client sets `tagged_binary`, the client sets
+`visual`, and the loaded checkpoint is a fusion architecture. The `ready` payload reports what the
+server actually agreed to, not what was asked for.
+
+### Handshake
+
+```json
+{"sample_rate": 16000, "tagged_binary": true, "visual": true}
+```
+
+```json
+{
+  "type": "ready",
+  "payload": {
+    "sample_rate": 16000,
+    "model": "attention",
+    "window_sec": 3.0,
+    "hop_sec": 0.5,
+    "tagged_binary": true,
+    "visual_enabled": true,
+    "multimodal_model": true,
+    "max_frames": 75,
+    "expected_landmarks": 468
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `tagged_binary` | Whether the server will read a 4-byte header on binary frames |
+| `visual_enabled` | **Whether landmarks will actually be used.** Check this, not your request |
+| `multimodal_model` | False for an audio-only checkpoint — vision cannot contribute at all |
+| `max_frames` | Landmark window length the server buffers |
+| `expected_landmarks` | Minimum landmarks per frame; extras are truncated |
+
+`visual_enabled: false` with `multimodal_model: true` means the request was incomplete. With
+`multimodal_model: false` it means the checkpoint is unimodal, and no client change will help.
+
+### Tagged binary framing
+
+When `tagged_binary` is true, **every** binary frame carries a 4-byte header:
+
+```
+byte 0    channel tag   0 = audio PCM, 1 = face landmarks
+bytes 1-3 reserved      zero
+bytes 4.. payload       float32, little-endian
+```
+
+The header is 4 bytes rather than 1 so the float32 payload stays 4-byte aligned for
+`np.frombuffer`.
+
+```javascript
+function tagFrame(tag, buffer) {
+  const out = new Uint8Array(4 + buffer.byteLength);
+  out[0] = tag;
+  out.set(new Uint8Array(buffer), 4);
+  return out.buffer;
+}
+ws.send(tagFrame(0, pcmBuffer));        // audio
+ws.send(tagFrame(1, landmarkBuffer));   // landmarks
+```
+
+**Clients that omit `tagged_binary` send untagged PCM exactly as before and are unaffected.** That
+backward compatibility is tested (`test_ws_untagged_audio_still_works`).
+
+### Landmark frames
+
+Payload is `n_landmarks * 3` float32 values — raw `(x, y, z)` per landmark, flattened, **not
+normalised**:
+
+```
+[x0, y0, z0, x1, y1, z1, ...]
+```
+
+The server reshapes to `(-1, 3)` and applies `src.features.normalize_landmarks`, the same function
+that produced the training features. Normalisation is deliberately not duplicated in JavaScript — see
+[frontend/video-pipeline.md](../frontend/video-pipeline.md#where-normalisation-happens-and-why).
+
+A browser `FaceLandmarker` returns 478 landmarks (468 base mesh + 10 iris); the server keeps the
+leading `expected_landmarks`. Sending more is fine, fewer is an error.
+
+| Condition | Response |
+|---|---|
+| Valid frame | none — state updated silently |
+| Float count not a multiple of 3 | `error` frame, connection stays open |
+| Fewer than `expected_landmarks` | `error` frame, connection stays open |
+| Sent when `visual_enabled` is false | silently ignored |
+
+**Landmark frames never trigger inference.** Audio drives the clock.
+
+### Freshness
+
+The visual buffer tracks when it last received a frame and reports itself inactive after
+`stale_after` (2 s). An inactive track yields `None` rather than a zero array, so the engine reports
+`visual_active: false` and the caller knows the prediction was audio-only. Feeding zeros instead
+would be indistinguishable from a real all-zero face and would silently overstate the prediction.
+
+The visual window is sampled at the instant the audio window closes — before resampling and before
+the forward pass — so server compute cannot age a live track. That ordering was a genuine bug: the
+first inference pays a multi-second lazy `import librosa`, which pushed a healthy face track past
+`stale_after` and silently degraded every first prediction to audio-only.
+
+### Inspecting state
+
+```json
+{"type": "stats"}
+```
+
+```json
+{
+  "type": "info",
+  "payload": {
+    "message": "stats",
+    "visual": {"frames_buffered": 30, "frames_received": 142,
+               "frames_rejected": 0, "active": true, "expected_landmarks": 468}
+  }
+}
+```
+
+`visual` is `null` when visual streaming is not enabled. Useful for confirming frames are arriving
+before debugging the model.
+
+### What a prediction reports
+
+```json
+{
+  "emotion": "happy", "confidence": 0.8734,
+  "probabilities": {"...": 0.0},
+  "latency_ms": 18.4, "model_name": "attention",
+  "modalities": ["audio", "visual"],
+  "visual_active": true
+}
+```
+
+`modalities` and `visual_active` describe **that specific prediction**. A fusion model with no live
+face still predicts, on a zero visual tensor, and reports `["audio"]` — because its accuracy in that
+condition is not the accuracy it was evaluated at.
 
 ---
 
@@ -534,9 +677,9 @@ websocat ws://localhost:8000/ws/stream
 
 ## Protocol limitations
 
-**No format negotiation or validation.** The server assumes float32 mono at the declared rate. Sending
-int16 produces garbage silently. A `format` field in the handshake, validated server-side, would close
-this.
+**No audio format negotiation or validation.** The server assumes float32 mono at the declared rate.
+Sending int16 produces garbage silently. A `format` field in the handshake, validated server-side, would
+close this. (Landmark frames *are* validated — wrong sizes get an `error` frame.)
 
 **Handshake failures are silent.** A malformed handshake falls back to 16000 with no warning. Logging the
 fallback, or returning an `error`, would prevent a whole class of confusing bug.
@@ -545,9 +688,9 @@ fallback, or returning an `error`, would prevent a whole class of confusing bug.
 frames queue in the socket buffer and predictions fall further behind real time with no signal to the
 client. A sequence number or server timestamp in the payload would at least make the lag visible.
 
-**No video channel.** Fusion models are served with a zero visual tensor. Adding video would need a
-second frame type — a tagged binary envelope, or a separate socket — plus temporal alignment between the
-streams.
+**Video is landmark-only.** The client streams face-landmark coordinates, not frames, so the server
+never sees imagery and needs no `mediapipe` install. A pipeline wanting raw-frame features server-side
+would need a different channel. See [Visual streaming](#visual-streaming).
 
 **Window and hop are not client-configurable.** They come from `AudioStreamBuffer`'s constructor
 defaults. A client wanting lower latency at higher compute cost cannot request a shorter hop.

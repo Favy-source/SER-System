@@ -1,19 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Header }          from './components/Header.jsx';
 import { AudioCapture }    from './components/AudioCapture.jsx';
+import { VideoCapture }    from './components/VideoCapture.jsx';
 import { EmotionDisplay }  from './components/EmotionDisplay.jsx';
 import { ProbabilityBars } from './components/ProbabilityBars.jsx';
 import { Timeline }        from './components/Timeline.jsx';
 import { useStream }       from './hooks/useStream.js';
+import { useFaceTracking } from './hooks/useFaceTracking.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
-  const { status, prediction, history, error, start, stop, reset } = useStream();
+  const {
+    status, prediction, history, error, visualEnabled,
+    start, stop, reset, sendLandmarks,
+  } = useStream();
 
-  const [health,          setHealth]          = useState(null);
-  const [filePrediction,  setFilePrediction]  = useState(null);
-  const [uploading,       setUploading]       = useState(false);
+  const face     = useFaceTracking();
+  const videoRef = useRef(null);
+
+  const [health,         setHealth]         = useState(null);
+  const [filePrediction, setFilePrediction] = useState(null);
+  const [uploading,      setUploading]      = useState(false);
+  const [useCamera,      setUseCamera]      = useState(false);
+  const [uploadError,    setUploadError]    = useState(null);
 
   // Poll /health every 10 s
   useEffect(() => {
@@ -27,9 +37,33 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  const streaming = status === 'streaming' || status === 'connecting';
+
+  // Start/stop face tracking alongside the audio stream. Landmarks go straight
+  // to the socket; the server normalises them with the same function the
+  // training pipeline used.
+  const handleStart = useCallback(async () => {
+    await start({ visual: useCamera });
+    if (useCamera && videoRef.current) {
+      await face.start(videoRef.current, sendLandmarks);
+    }
+  }, [start, useCamera, face, sendLandmarks]);
+
+  const handleStop = useCallback(() => {
+    face.stop();
+    stop();
+  }, [face, stop]);
+
+  // Release the camera if the whole stream dies for any other reason.
+  useEffect(() => {
+    if (status === 'idle' || status === 'error') face.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
   const handleFile = async (file) => {
     if (!file) return;
     setUploading(true);
+    setUploadError(null);
     setFilePrediction(null);
     const form = new FormData();
     form.append('file', file);
@@ -40,27 +74,29 @@ export default function App() {
       setFilePrediction(data);
     } catch (e) {
       setFilePrediction(null);
-      // surface as a transient alert rather than breaking the whole UI
-      console.error(e);
+      setUploadError(e.message);
     }
     setUploading(false);
   };
 
   // Live predictions take priority over file predictions
   const activePrediction = prediction ?? filePrediction;
+  const banner = error ?? uploadError;
 
   return (
     <div className="app">
       <Header health={health} status={status} />
 
-      {error && <div className="error-banner">⚠ {error}</div>}
+      {banner && (
+        <div className="error-banner" onClick={() => setUploadError(null)}>⚠ {banner}</div>
+      )}
 
       <div className="row">
         <div className="card">
           <AudioCapture
             status={status}
-            onStart={start}
-            onStop={stop}
+            onStart={handleStart}
+            onStop={handleStop}
             onFile={handleFile}
             uploading={uploading}
           />
@@ -68,6 +104,19 @@ export default function App() {
         <div className="card">
           <EmotionDisplay prediction={activePrediction} />
         </div>
+      </div>
+
+      <div className="card">
+        <VideoCapture
+          ref={videoRef}
+          enabled={useCamera}
+          onToggle={setUseCamera}
+          status={face.status}
+          frameRate={face.frameRate}
+          error={face.error}
+          visualEnabled={visualEnabled}
+          streaming={streaming}
+        />
       </div>
 
       <div className="card">
@@ -83,6 +132,11 @@ export default function App() {
           <span>Model: {activePrediction.model_name}</span>
           <span className="sep">·</span>
           <span>Latency: {activePrediction.latency_ms} ms</span>
+          <span className="sep">·</span>
+          {/* Which modalities actually contributed to THIS prediction */}
+          <span className={activePrediction.visual_active ? 'mod-multi' : undefined}>
+            {(activePrediction.modalities ?? ['audio']).join(' + ')}
+          </span>
           {history.length > 0 && (
             <>
               <span className="sep">·</span>

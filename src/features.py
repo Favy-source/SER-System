@@ -4,7 +4,12 @@ from typing import Optional, Tuple
 import numpy as np
 import librosa
 
-from .constants import LANDMARK_DIM, N_FACE_LANDMARKS, REFINE_LANDMARKS
+from .constants import (
+    LANDMARK_COORDS,
+    LANDMARK_DIM,
+    N_FACE_LANDMARKS,
+    REFINE_LANDMARKS,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -82,6 +87,44 @@ def extract_audio_features(path: str, cfg: dict) -> dict:
     return {"mel": mel, "mfcc": mfcc}
 
 
+def normalize_landmarks(coords: np.ndarray) -> np.ndarray:
+    """Translation- and scale-normalise one frame of face landmarks.
+
+    coords: (n_landmarks, 3) raw (x, y, z) -> (LANDMARK_DIM,) flattened.
+
+    Subtracting the centroid removes head position within the frame; dividing
+    by the maximum radius removes apparent face size, which varies with
+    distance from the camera. What survives is the *shape* of the face, which
+    is where expression lives. Without both steps a network can reach low
+    training loss by tracking head movement, which correlates with emotion in
+    acted corpora but will not generalise.
+
+    Accepts more landmarks than configured and keeps the leading
+    N_FACE_LANDMARKS. MediaPipe appends the 10 iris points after the 468-point
+    base mesh, so the base mesh is always the leading block — which lets a
+    browser-side FaceLandmarker (478 points) feed a model trained on 468
+    without the two implementations having to agree on refine_landmarks.
+
+    This is the single normalisation used by BOTH the offline training path and
+    the live serving path. Reimplementing it per call site — in JavaScript, say
+    — would be textbook train/serve skew.
+    """
+    coords = np.asarray(coords, dtype=np.float32)
+    if coords.ndim != 2 or coords.shape[1] != LANDMARK_COORDS:
+        raise ValueError(
+            f"expected (n_landmarks, {LANDMARK_COORDS}) coordinates, got {coords.shape}"
+        )
+    if len(coords) < N_FACE_LANDMARKS:
+        raise ValueError(
+            f"got {len(coords)} landmarks, need at least {N_FACE_LANDMARKS}"
+        )
+    coords = coords[:N_FACE_LANDMARKS]
+
+    coords = coords - coords.mean(0)
+    scale = np.linalg.norm(coords, axis=1).max()
+    return (coords / (scale + 1e-8)).flatten()   # (LANDMARK_DIM,)
+
+
 def extract_visual_features(
     video_path: str,
     max_frames: int = 75,
@@ -111,17 +154,15 @@ def extract_visual_features(
                 lm = result.multi_face_landmarks[0].landmark
                 # Fail loudly rather than writing arrays the models cannot load.
                 # preprocess.py collects this per file into errors_visual.txt.
-                if len(lm) != N_FACE_LANDMARKS:
+                if len(lm) < N_FACE_LANDMARKS:
                     raise ValueError(
-                        f"FaceMesh returned {len(lm)} landmarks, expected "
+                        f"FaceMesh returned {len(lm)} landmarks, need at least "
                         f"{N_FACE_LANDMARKS} (REFINE_LANDMARKS={REFINE_LANDMARKS}). "
                         f"Reconcile src/constants.py with your mediapipe version."
                     )
-                coords = np.array([[l.x, l.y, l.z] for l in lm], dtype=np.float32)
-                coords -= coords.mean(0)
-                scale = np.linalg.norm(coords, axis=1).max()
-                coords /= scale + 1e-8
-                frames.append(coords.flatten())  # (LANDMARK_DIM,)
+                frames.append(normalize_landmarks(
+                    np.array([[l.x, l.y, l.z] for l in lm], dtype=np.float32)
+                ))
     cap.release()
 
     if not frames:

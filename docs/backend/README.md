@@ -21,7 +21,7 @@ prediction, and streams real-time predictions over a WebSocket.
 |---|---:|---|
 | [`main.py`](../../backend/main.py) | 238 | App construction, CORS, lifespan, all routes, WebSocket handler |
 | [`inference.py`](../../backend/inference.py) | 127 | `InferenceEngine` — checkpoint loading, feature extraction, prediction |
-| [`stream.py`](../../backend/stream.py) | 77 | `AudioStreamBuffer` — sliding-window accumulation over a live PCM stream |
+| [`stream.py`](../../backend/stream.py) | 178 | `AudioStreamBuffer` (audio windowing) and `VisualStreamBuffer` (rolling landmark window) |
 | [`schemas.py`](../../backend/schemas.py) | 23 | Pydantic response models |
 | [`requirements.txt`](../../backend/requirements.txt) | 20 | Python dependencies for the whole project, not just the backend |
 | `__init__.py` | 0 | Package marker |
@@ -32,14 +32,16 @@ logic lives in [`src/`](../../src/), which the backend imports rather than dupli
 ```python
 from src.constants import LANDMARK_DIM
 from src.datasets import UNIFIED, IDX2LABEL
-from src.features import mel_spectrogram, mfcc_features
+from src.features import mel_spectrogram, mfcc_features, normalize_landmarks
 from src.models.builder import build_model, is_multimodal
 ```
 
 That import list is the single most important design decision in the backend. Feature extraction at
 serve time uses the *same functions* that produced the training features, so train/serve skew — a
 mismatch between how features are computed during training and during inference — is structurally
-impossible rather than merely avoided by discipline. It is one of the most common and hardest-to-diagnose
+impossible rather than merely avoided by discipline. `normalize_landmarks` is there for the same
+reason: the browser sends **raw** landmark coordinates and the server normalises them, so that maths
+exists once, in Python, rather than being reimplemented in JavaScript. It is one of the most common and hardest-to-diagnose
 failure modes in deployed ML systems.
 
 ---
@@ -308,23 +310,21 @@ Logging the fallback would be worth adding.
 
 ## Known limitations
 
-### Multimodal checkpoints are served effectively audio-only
+### A fusion model without a live face runs audio-only — and says so
 
-There is no video ingestion path. [`_zero_visual`](../../backend/inference.py#L79) feeds a zero tensor to
-the visual branch of any fusion model:
+[`_zero_visual`](../../backend/inference.py) supplies a zero tensor when no landmark window is
+available:
 
 ```python
 def _zero_visual(self):
     return torch.zeros(1, self.cfg["visual"]["max_frames"], LANDMARK_DIM, device=self.device)
 ```
 
-Fusion checkpoints load and predict, but their visual half contributes nothing at inference time. **A
-fusion model's reported evaluation accuracy therefore does not describe its served accuracy.** For
-`decision_level` the degradation is graceful and quantifiable — the visual logits are whatever the
-visual model outputs for an all-zero input, weighted by the learned `w₁`. For `feature_level` and
-`attention` the model is operating well outside its training distribution.
-
-If you serve a fusion model, evaluate it with the visual input zeroed to get the honest number.
+That path is now a fallback rather than the only option — a webcam client can stream real landmarks
+([websocket-protocol.md](websocket-protocol.md#visual-streaming)). When it *is* taken, the prediction
+carries `visual_active: false` and `modalities: ["audio"]`, so a caller is never misled about whether
+fusion actually fused. A fusion model on zeros is outside its training distribution and its reported
+evaluation accuracy does not describe that condition.
 
 ### `window_sec` is not tied to the config
 
@@ -369,4 +369,4 @@ users.
 | [inference-engine.md](inference-engine.md) | `InferenceEngine` and `AudioStreamBuffer` internals |
 | [deployment.md](deployment.md) | Production concerns: CORS, reverse proxy, containers, security |
 | [../architecture.md](../architecture.md) | How the backend fits the whole system |
-| [../testing.md](../testing.md#test_apipy--20-tests) | The 20 API tests and their mocking strategy |
+| [../testing.md](../testing.md#test_apipy--34-tests) | The 34 API tests and their mocking strategy |
