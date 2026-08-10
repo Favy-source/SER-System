@@ -147,6 +147,12 @@ def main():
     lat_p99  = np.percentile(times, 99)
     print(f"Mean: {lat_mean:.2f} ms | p50: {lat_p50:.2f} ms | p95: {lat_p95:.2f} ms | p99: {lat_p99:.2f} ms")
 
+    # Per-class numbers and the confusion matrix belong in the machine-readable
+    # output, not only in stdout and a PNG. The per-class breakdown is where the
+    # actual diagnosis lives — on RAVDESS the headline accuracy hides that happy
+    # and sad are barely detected at all.
+    per_class = classification_report(labels, preds, target_names=UNIFIED,
+                                      output_dict=True, zero_division=0)
     results = {
         "model":           model_name,
         "n_params":        n_params,
@@ -159,6 +165,14 @@ def main():
         "latency_p95_ms":  round(float(lat_p95),  3),
         "latency_p99_ms":  round(float(lat_p99),  3),
         "device":          str(device),
+        "per_class": {
+            e: {k: round(float(v), 4) for k, v in per_class[e].items()}
+            for e in UNIFIED
+        },
+        "confusion_matrix": cm.tolist(),
+        "labels": list(UNIFIED),
+        "test_speakers": sorted(test_df["speaker"].unique().tolist()),
+        "feature": feature,
     }
     out_json = results_dir / f"{model_name}_results.json"
     out_json.write_text(json.dumps(results, indent=2))

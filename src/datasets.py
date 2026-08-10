@@ -166,14 +166,33 @@ def speaker_independent_split(
     seed: int = 42,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     rng = np.random.default_rng(seed)
-    speakers = df["speaker"].unique()
+
+    # np.asarray(..., dtype=object) is load-bearing, not tidying. Modern pandas
+    # returns an extension array (StringArray) from .unique(), and numpy warns:
+    #   "shuffling a 'StringArray' ... `shuffle` is not guaranteed to behave
+    #    correctly ... may contain duplicates after shuffling"
+    # A duplicate here would place one speaker in two splits and silently void
+    # the speaker-independence guarantee every reported number rests on. No
+    # corruption was observed on pandas 3.0.3 / numpy 2.4.6, but the guarantee
+    # must not depend on which pandas happens to be installed.
+    speakers = np.asarray(df["speaker"].unique(), dtype=object)
     rng.shuffle(speakers)
+
     n = len(speakers)
     n_test = max(1, int(n * test_frac))
     n_val  = max(1, int(n * val_frac))
     test_spk  = set(speakers[:n_test])
     val_spk   = set(speakers[n_test: n_test + n_val])
     train_spk = set(speakers[n_test + n_val:])
+
+    # Cheap, and it converts a silent leak into a loud failure.
+    assert len(train_spk) + len(val_spk) + len(test_spk) == n, (
+        "speaker partition lost or duplicated speakers during shuffle: "
+        f"{len(train_spk)}+{len(val_spk)}+{len(test_spk)} != {n}"
+    )
+    assert not (train_spk & val_spk) and not (val_spk & test_spk) \
+        and not (train_spk & test_spk), "speaker splits overlap"
+
     return (
         df[df["speaker"].isin(train_spk)].reset_index(drop=True),
         df[df["speaker"].isin(val_spk)].reset_index(drop=True),

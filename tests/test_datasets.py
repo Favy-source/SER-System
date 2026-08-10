@@ -358,3 +358,44 @@ def test_dataset_missing_video_returns_zeros(tmp_path):
     _, visual, _ = ds[0]
     assert visual.shape == (75, LANDMARK_DIM)
     assert visual.sum().item() == 0.0
+
+
+def test_split_handles_pandas_extension_string_dtype():
+    """The split must be safe with a pandas-backed string column.
+
+    Every other split test builds its DataFrame from Python str objects, so
+    .unique() returns an ndarray and numpy shuffles it happily. Real corpora go
+    through pd.DataFrame(records), which on modern pandas yields a StringArray —
+    and numpy warns that shuffling one "may contain duplicates". A duplicate
+    would put one speaker in two splits and void the speaker-independence
+    guarantee silently.
+    """
+    df = pd.DataFrame({
+        "audio_path": [f"/f/{i}.wav" for i in range(60)],
+        "video_path": [None] * 60,
+        "label": [UNIFIED[i % 6] for i in range(60)],
+        "speaker": pd.array([f"spk_{i % 20:02d}" for i in range(60)], dtype="string"),
+        "dataset": ["t"] * 60,
+    })
+    assert str(df["speaker"].dtype) in ("string", "str"), "fixture must use the extension dtype"
+
+    train, val, test = speaker_independent_split(df, 0.15, 0.15, seed=7)
+
+    s_tr, s_va, s_te = (set(x["speaker"]) for x in (train, val, test))
+    assert len(s_tr | s_va | s_te) == 20, "speakers were lost or duplicated"
+    assert not (s_tr & s_va) and not (s_va & s_te) and not (s_tr & s_te)
+    assert len(train) + len(val) + len(test) == len(df)
+
+
+def test_split_is_reproducible_with_extension_dtype():
+    df = pd.DataFrame({
+        "audio_path": [f"/f/{i}.wav" for i in range(40)],
+        "video_path": [None] * 40,
+        "label": [UNIFIED[i % 6] for i in range(40)],
+        "speaker": pd.array([f"s{i % 10}" for i in range(40)], dtype="string"),
+        "dataset": ["t"] * 40,
+    })
+    a = speaker_independent_split(df, 0.15, 0.15, seed=3)
+    b = speaker_independent_split(df, 0.15, 0.15, seed=3)
+    for x, y in zip(a, b):
+        assert set(x["speaker"]) == set(y["speaker"])
