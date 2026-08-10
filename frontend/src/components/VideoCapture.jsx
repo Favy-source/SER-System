@@ -17,7 +17,7 @@ const STATUS = {
  * only landmark coordinates leave the browser, never pixels.
  */
 export const VideoCapture = forwardRef(function VideoCapture(
-  { enabled, onToggle, status, frameRate, error, visualEnabled, streaming },
+  { enabled, onToggle, status, frameRate, error, visualEnabled, streaming, delegate },
   videoRef,
 ) {
   const s = STATUS[status] ?? STATUS.idle;
@@ -63,6 +63,7 @@ export const VideoCapture = forwardRef(function VideoCapture(
           <span>{s.label}</span>
         </span>
         {live && frameRate > 0 && <span className="chip">{frameRate} fps</span>}
+        {live && delegate && <span className="chip">{delegate}</span>}
       </div>
 
       {error && <div className="video-note error">{error}</div>}

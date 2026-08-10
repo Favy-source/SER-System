@@ -163,7 +163,24 @@ export function useStream() {
       ws.onclose = () => setStatus(prev => (prev === 'error' ? prev : 'idle'));
 
     } catch (e) {
-      setError(e.message);
+      const msg = String(e?.message ?? e);
+      // "Could not start audio source" is the browser wording for a mic it
+      // cannot open — usually another app holding it, or a context with no
+      // media access at all (embedded webviews).
+      let friendly = msg;
+      if (/NotReadable|Could not start audio/i.test(msg)) {
+        friendly = 'Could not start the microphone. Another application may be using it, or this '
+                 + 'browser context has no media access. Open http://localhost:3000 in Chrome or '
+                 + 'Firefox — an embedded webview such as VS Code Simple Browser cannot capture audio.';
+      } else if (/NotAllowed|Permission/i.test(msg)) {
+        friendly = 'Microphone permission denied. Allow it in the browser, then try again.';
+      } else if (/NotFound|Requested device/i.test(msg)) {
+        friendly = 'No microphone found. Check your system input device.';
+      } else if (/mediaDevices|undefined/i.test(msg)) {
+        friendly = 'This page is not in a secure context, so the microphone is unavailable. '
+                 + 'Use http://localhost (not an IP address) or serve over HTTPS.';
+      }
+      setError(friendly);
       setStatus('error');
       _cleanup();
     }

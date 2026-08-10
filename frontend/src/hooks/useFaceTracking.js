@@ -26,6 +26,7 @@ export function useFaceTracking() {
   const [status,    setStatus]    = useState('idle');   // idle|loading|tracking|no-face|error|unsupported
   const [error,     setError]     = useState(null);
   const [frameRate, setFrameRate] = useState(0);
+  const [delegate,  setDelegate]  = useState(null);   // GPU or CPU, whichever loaded
 
   const landmarkerRef = useRef(null);
   const streamRef     = useRef(null);
@@ -70,13 +71,28 @@ export function useFaceTracking() {
 
       if (!landmarkerRef.current) {
         const fileset = await FilesetResolver.forVisionTasks(WASM_PATH);
-        landmarkerRef.current = await FaceLandmarker.createFromOptions(fileset, {
-          baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'GPU' },
+        const opts = (delegate) => ({
+          baseOptions: { modelAssetPath: MODEL_PATH, delegate },
           runningMode: 'VIDEO',
           numFaces: 1,
           outputFaceBlendshapes: false,
           outputFacialTransformationMatrixes: false,
         });
+
+        // GPU is much faster, but WebGL is simply absent in some contexts —
+        // embedded webviews (VS Code Simple Browser), software rendering,
+        // headless. There it fails with
+        //   emscripten_webgl_create_context() returned error 0; StartGraph failed
+        // which is fatal rather than slow, so fall back to the CPU delegate
+        // instead of losing face tracking altogether.
+        try {
+          landmarkerRef.current = await FaceLandmarker.createFromOptions(fileset, opts('GPU'));
+          setDelegate('GPU');
+        } catch (gpuErr) {
+          console.warn('MediaPipe GPU delegate unavailable, retrying on CPU:', gpuErr);
+          landmarkerRef.current = await FaceLandmarker.createFromOptions(fileset, opts('CPU'));
+          setDelegate('CPU');
+        }
       }
 
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -139,13 +155,22 @@ export function useFaceTracking() {
 
     } catch (e) {
       const msg = String(e?.message ?? e);
-      // A missing model file is the most likely failure and has a specific fix,
-      // so say so rather than surfacing a raw fetch error.
-      const friendly = /fetch|404|model/i.test(msg)
-        ? 'Face model not found. Run "npm run setup:mediapipe" in frontend/.'
-        : msg;
+      // Map the failures that actually happen onto their specific fixes, rather
+      // than surfacing a six-line MediaPipe graph trace.
+      let friendly = msg;
+      if (/webgl|kGpuService|StartGraph|StartRun/i.test(msg)) {
+        friendly = 'Face tracking needs WebGL, which this browser context does not provide. '
+                 + 'Open http://localhost:3000 in Chrome or Firefox — an embedded webview such '
+                 + 'as VS Code Simple Browser supports neither WebGL nor camera access.';
+      } else if (/fetch|404|modelAssetPath/i.test(msg)) {
+        friendly = 'Face model not found. Run "npm run setup:mediapipe" in frontend/.';
+      } else if (/NotAllowed|Permission/i.test(msg)) {
+        friendly = 'Camera permission denied. Allow it in the browser, then try again.';
+      } else if (/NotFound|NotReadable|Could not start/i.test(msg)) {
+        friendly = 'Camera unavailable — another application may be using it.';
+      }
       setError(friendly);
-      setStatus(/getUserMedia|Permission|NotAllowed|NotFound/i.test(msg) ? 'error' : 'unsupported');
+      setStatus(/NotAllowed|Permission|NotFound|NotReadable/i.test(msg) ? 'error' : 'unsupported');
       _cleanup();
     }
   }, [_cleanup]);
@@ -155,5 +180,5 @@ export function useFaceTracking() {
     setStatus('idle');
   }, [_cleanup]);
 
-  return { status, error, frameRate, start, stop };
+  return { status, error, frameRate, delegate, start, stop };
 }

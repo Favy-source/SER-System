@@ -130,6 +130,7 @@ export default function App() {
           onToggle={setUseCamera}
           status={face.status}
           frameRate={face.frameRate}
+          delegate={face.delegate}
           error={face.error}
           visualEnabled={visualEnabled}
           streaming={streaming}
