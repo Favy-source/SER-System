@@ -102,7 +102,8 @@ def main():
     modality = "multimodal" if multi else ("visual" if args.model == "visual_lstm" else "audio")
 
     def make_loader(split_df, shuffle):
-        ds = EmotionDataset(split_df, str(proc), modality, args.feature)
+        ds = EmotionDataset(split_df, str(proc), modality, args.feature,
+                            max_frames=cfg["visual"]["max_frames"])
         return DataLoader(
             ds, batch_size=tc["batch_size"], shuffle=shuffle,
             num_workers=tc["num_workers"], pin_memory=tc["pin_memory"],
@@ -112,7 +113,7 @@ def main():
     val_loader   = make_loader(val_df,   False)
 
     num_classes = len(UNIFIED)
-    model = build_model(args.model, cfg, num_classes).to(device)
+    model = build_model(args.model, cfg, num_classes, args.feature).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Parameters: {n_params:,}")
 

@@ -15,12 +15,13 @@ from src.models.visual import VisualLSTM
 from src.models.fusion import (
     FeatureLevelFusion, DecisionLevelFusion, CrossModalAttentionFusion,
 )
+from src.constants import LANDMARK_DIM
 from src.models.builder import build_model, is_multimodal, FUSION, UNIMODAL
 
 N_CLASSES = 6
 B         = 4
-MEL       = (B, 1, 128, 130)   # (batch, channel, n_mels, n_frames)
-VISUAL    = (B, 75, 1404)      # (batch, frames, 468 landmarks × 3)
+MEL       = (B, 1, 128, 130)          # (batch, channel, n_mels, n_frames)
+VISUAL    = (B, 75, LANDMARK_DIM)     # (batch, frames, landmarks × 3 coords)
 
 # Minimal config sufficient for build_model
 CFG = {

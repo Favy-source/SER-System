@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -5,6 +6,8 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
+
+from .constants import LANDMARK_DIM
 
 UNIFIED = ["neutral", "happy", "sad", "angry", "fearful", "disgust"]
 LABEL2IDX = {e: i for i, e in enumerate(UNIFIED)}
@@ -57,6 +60,28 @@ def parse_cremad(root: str, emotion_map: dict) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
+_MSP_SPEAKER_RE = re.compile(r"^[MF]\d+$")
+
+
+def msp_speaker(fname: str) -> Optional[str]:
+    """Extract the actor id from an MSP-IMPROV filename stem.
+
+        MSP-IMPROV-S01A-M01-P-FM01
+                        ^^^ actor (M01..M06, F01..F06)
+
+    Scans for the first hyphen-delimited segment matching a single M/F followed
+    by digits, rather than slicing at a fixed offset. "MSP", "IMPROV", "S01A"
+    and the trailing take id ("FM01", "FF01") do not match that pattern.
+
+    Returns None when no actor field is recognisable, so the caller decides how
+    to handle it instead of this inventing a speaker.
+    """
+    for seg in fname.split("-"):
+        if _MSP_SPEAKER_RE.match(seg):
+            return seg
+    return None
+
+
 def parse_msp_improv(root: str, emotion_map: dict) -> pd.DataFrame:
     """Parse MSP-IMPROV.
 
@@ -65,6 +90,7 @@ def parse_msp_improv(root: str, emotion_map: dict) -> pd.DataFrame:
     Adjust field index if your copy uses a different column ordering.
     """
     records = []
+    unknown_speakers = 0
     label_file = Path(root) / "Evalution.txt"
     if not label_file.exists():
         return pd.DataFrame()
@@ -83,13 +109,25 @@ def parse_msp_improv(root: str, emotion_map: dict) -> pd.DataFrame:
             audio = Path(root) / "Audio" / f"{fname}.wav"
             if not audio.exists():
                 continue
+            spk = msp_speaker(fname)
+            if spk is None:
+                unknown_speakers += 1
             records.append({
                 "audio_path": str(audio),
                 "video_path": None,
                 "label": label,
-                "speaker": f"msp_{fname[:6]}",
+                # Unrecognised stems collapse into one bucket. That is coarse
+                # but leakage-safe; per-file ids would scatter one actor across
+                # splits and break speaker independence.
+                "speaker": f"msp_{spk}" if spk else "msp_unknown",
                 "dataset": "msp_improv",
             })
+
+    if unknown_speakers:
+        print(
+            f"  msp_improv: {unknown_speakers} files had no recognisable actor "
+            f"field and were grouped as 'msp_unknown' — check the stem layout"
+        )
     return pd.DataFrame(records)
 
 
@@ -154,11 +192,13 @@ class EmotionDataset(Dataset):
         processed_dir: str,
         modality: str = "audio",   # "audio" | "visual" | "multimodal"
         feature: str = "mel",      # "mel"   | "mfcc"
+        max_frames: int = 75,      # must match cfg["visual"]["max_frames"]
     ):
         self.df = df.reset_index(drop=True)
         self.proc = Path(processed_dir)
         self.modality = modality
         self.feature = feature
+        self.max_frames = max_frames
 
     def __len__(self) -> int:
         return len(self.df)
@@ -166,16 +206,20 @@ class EmotionDataset(Dataset):
     def _load_audio(self, audio_path: str) -> torch.Tensor:
         p = self.proc / self.feature / (Path(audio_path).stem + ".npy")
         t = torch.from_numpy(np.load(p)).float()
-        if self.feature == "mel":
-            t = t.unsqueeze(0)  # (1, n_mels, T)
-        return t
+        # Both feature types are (freq, T) on disk and both are consumed by
+        # Conv2d, so both need the channel axis — mel: (1, n_mels, T),
+        # mfcc: (1, 3*n_mfcc, T). Adding it only for mel left MFCC tensors 3-D
+        # and Conv2d read the batch dimension as channels.
+        return t.unsqueeze(0)
 
     def _load_visual(self, video_path: Optional[str]) -> torch.Tensor:
         if video_path:
             p = self.proc / "landmarks" / (Path(video_path).stem + ".npy")
             if p.exists():
                 return torch.from_numpy(np.load(p)).float()
-        return torch.zeros(75, 1404)  # zero-fill when video unavailable
+        # zero-fill when video unavailable — this is what lets audio-only
+        # corpora participate in multimodal training
+        return torch.zeros(self.max_frames, LANDMARK_DIM)
 
     def __getitem__(self, idx: int):
         row = self.df.iloc[idx]

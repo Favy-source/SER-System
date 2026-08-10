@@ -4,6 +4,8 @@ from typing import Optional, Tuple
 import numpy as np
 import librosa
 
+from .constants import LANDMARK_DIM, N_FACE_LANDMARKS, REFINE_LANDMARKS
+
 warnings.filterwarnings("ignore")
 
 try:
@@ -96,7 +98,7 @@ def extract_visual_features(
     frames = []
     with mp_face.FaceMesh(
         static_image_mode=False, max_num_faces=1,
-        refine_landmarks=True, min_detection_confidence=0.5,
+        refine_landmarks=REFINE_LANDMARKS, min_detection_confidence=0.5,
     ) as mesh:
         while cap.isOpened() and len(frames) < max_frames:
             ok, frame = cap.read()
@@ -107,18 +109,26 @@ def extract_visual_features(
             result = mesh.process(rgb)
             if result.multi_face_landmarks:
                 lm = result.multi_face_landmarks[0].landmark
+                # Fail loudly rather than writing arrays the models cannot load.
+                # preprocess.py collects this per file into errors_visual.txt.
+                if len(lm) != N_FACE_LANDMARKS:
+                    raise ValueError(
+                        f"FaceMesh returned {len(lm)} landmarks, expected "
+                        f"{N_FACE_LANDMARKS} (REFINE_LANDMARKS={REFINE_LANDMARKS}). "
+                        f"Reconcile src/constants.py with your mediapipe version."
+                    )
                 coords = np.array([[l.x, l.y, l.z] for l in lm], dtype=np.float32)
                 coords -= coords.mean(0)
                 scale = np.linalg.norm(coords, axis=1).max()
                 coords /= scale + 1e-8
-                frames.append(coords.flatten())  # (1404,)
+                frames.append(coords.flatten())  # (LANDMARK_DIM,)
     cap.release()
 
     if not frames:
         return None
 
-    seq = np.stack(frames)  # (T, 1404)
+    seq = np.stack(frames)  # (T, LANDMARK_DIM)
     if len(seq) < max_frames:
-        pad = np.zeros((max_frames - len(seq), seq.shape[1]), dtype=np.float32)
+        pad = np.zeros((max_frames - len(seq), LANDMARK_DIM), dtype=np.float32)
         seq = np.vstack([seq, pad])
     return seq[:max_frames]

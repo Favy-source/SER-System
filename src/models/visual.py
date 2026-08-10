@@ -3,12 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+from ..constants import LANDMARK_DIM
+
+
 class VisualLSTM(nn.Module):
     """Bidirectional LSTM with attention pooling over facial landmark sequences."""
 
     def __init__(
         self,
-        input_dim: int = 1404,   # 468 landmarks * 3 coords
+        input_dim: int = LANDMARK_DIM,   # N_FACE_LANDMARKS * 3
         hidden_dim: int = 256,
         num_layers: int = 2,
         num_classes: int = 6,

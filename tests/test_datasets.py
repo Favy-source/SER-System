@@ -5,11 +5,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.constants import LANDMARK_DIM
 from src.datasets import (
     EmotionDataset,
     IDX2LABEL,
     LABEL2IDX,
     UNIFIED,
+    msp_speaker,
     parse_cremad,
     parse_msp_improv,
     parse_ravdess,
@@ -155,6 +157,105 @@ def test_parse_msp_improv_missing_label_file(tmp_path):
     assert len(df) == 0
 
 
+# ── MSP-IMPROV speaker extraction ─────────────────────────
+#
+# The previous implementation used fname[:6], which is the literal string
+# "MSP-IM" for every file in the real corpus — collapsing all ~8400 samples
+# into one split unit. These tests use real-format stems, which the earlier
+# synthetic "MSP-ABC-01" fixtures did not.
+
+REAL_STEMS = {
+    "MSP-IMPROV-S01A-M01-P-FM01": "M01",
+    "MSP-IMPROV-S01A-F01-S-FF01": "F01",
+    "MSP-IMPROV-S04B-M04-R-FM12": "M04",
+    "MSP-IMPROV-S06A-F06-T-FF03": "F06",
+}
+
+
+@pytest.mark.parametrize("stem,expected", list(REAL_STEMS.items()))
+def test_msp_speaker_extracts_actor_field(stem, expected):
+    assert msp_speaker(stem) == expected
+
+
+def test_msp_speaker_distinguishes_actors():
+    """The core regression: distinct actors must yield distinct ids."""
+    assert len({msp_speaker(s) for s in REAL_STEMS}) == len(REAL_STEMS)
+
+
+def test_msp_speaker_ignores_session_and_take_fields():
+    """S01A is a session, FM01/FF01 are takes — neither is the actor."""
+    spk = msp_speaker("MSP-IMPROV-S01A-M01-P-FM01")
+    assert spk not in {"S01A", "FM01", "P", "MSP", "IMPROV"}
+    assert spk == "M01"
+
+
+def test_msp_speaker_same_actor_across_sessions_is_one_id():
+    """Over-merging is safe; splitting one actor across units would leak."""
+    a = msp_speaker("MSP-IMPROV-S01A-M01-P-FM01")
+    b = msp_speaker("MSP-IMPROV-S01B-M01-R-FM07")
+    assert a == b == "M01"
+
+
+def test_msp_speaker_unrecognised_returns_none():
+    assert msp_speaker("some_other_naming_01") is None
+    assert msp_speaker("") is None
+
+
+def test_parse_msp_improv_speakers_are_distinct(tmp_path):
+    """Through the parser, on a real-format synthetic corpus."""
+    audio_dir = tmp_path / "Audio"
+    audio_dir.mkdir()
+    for stem in REAL_STEMS:
+        (audio_dir / f"{stem}.wav").touch()
+    (tmp_path / "Evalution.txt").write_text(
+        "".join(f"{stem} ; S ; A\n" for stem in REAL_STEMS)
+    )
+
+    df = parse_msp_improv(str(tmp_path), MSP_MAP)
+    assert len(df) == len(REAL_STEMS)
+    assert set(df["speaker"]) == {f"msp_{a}" for a in REAL_STEMS.values()}
+    assert df["speaker"].nunique() == len(REAL_STEMS)
+
+
+def test_parse_msp_improv_unrecognised_stem_buckets_together(tmp_path):
+    """Unparseable stems share one id rather than becoming per-file speakers."""
+    audio_dir = tmp_path / "Audio"
+    audio_dir.mkdir()
+    for stem in ("odd_name_a", "odd_name_b"):
+        (audio_dir / f"{stem}.wav").touch()
+    (tmp_path / "Evalution.txt").write_text(
+        "odd_name_a ; S ; A\nodd_name_b ; S ; H\n"
+    )
+
+    df = parse_msp_improv(str(tmp_path), MSP_MAP)
+    assert set(df["speaker"]) == {"msp_unknown"}
+
+
+def test_msp_speakers_survive_the_split(tmp_path):
+    """End of the chain: distinct actors must reach distinct split units.
+
+    With the old fname[:6] behaviour every MSP sample landed in one unit, so
+    the corpus went entirely to train, or entirely to test, by seed.
+    """
+    audio_dir = tmp_path / "Audio"
+    audio_dir.mkdir()
+    stems = [f"MSP-IMPROV-S0{i//2+1}A-{'MF'[i%2]}0{i//2+1}-P-FM0{i}"
+             for i in range(12)]
+    for stem in stems:
+        (audio_dir / f"{stem}.wav").touch()
+    (tmp_path / "Evalution.txt").write_text(
+        "".join(f"{s} ; S ; {'AHSN'[i % 4]}\n" for i, s in enumerate(stems))
+    )
+
+    df = parse_msp_improv(str(tmp_path), MSP_MAP)
+    assert df["speaker"].nunique() > 1, "all MSP samples collapsed to one speaker"
+
+    train, val, test = speaker_independent_split(df, 0.15, 0.15, seed=42)
+    assert len(train) and len(val) and len(test), (
+        "a single split received every MSP sample"
+    )
+
+
 # ── Speaker-independent split ─────────────────────────────
 
 
@@ -255,5 +356,5 @@ def test_dataset_missing_video_returns_zeros(tmp_path):
     }])
     ds = EmotionDataset(df, str(tmp_path), modality="multimodal", feature="mel")
     _, visual, _ = ds[0]
-    assert visual.shape == (75, 1404)
+    assert visual.shape == (75, LANDMARK_DIM)
     assert visual.sum().item() == 0.0

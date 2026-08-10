@@ -18,6 +18,7 @@ import torch
 import torch.nn.functional as F
 import yaml
 
+from src.constants import LANDMARK_DIM
 from src.datasets import UNIFIED, IDX2LABEL
 from src.features import mel_spectrogram, mfcc_features
 from src.models.builder import build_model, is_multimodal
@@ -39,7 +40,9 @@ class InferenceEngine:
         self.feature     = ckpt.get("feature", "mel")
         self.multimodal  = is_multimodal(self.model_name)
 
-        model = build_model(self.model_name, ckpt["cfg"], len(UNIFIED))
+        # Architecture comes from the checkpoint's own config, and the feature
+        # type it was trained on, so the LSTM width matches the state dict.
+        model = build_model(self.model_name, ckpt["cfg"], len(UNIFIED), self.feature)
         model.load_state_dict(ckpt["model"])
         model.eval()
         self.model = model.to(self.device)
@@ -69,16 +72,17 @@ class InferenceEngine:
                 acfg["hop_length"], acfg["f_min"], acfg["f_max"], acfg["normalize"],
             )
             return torch.from_numpy(feat).float().unsqueeze(0).unsqueeze(0).to(self.device)
-        # mfcc
+        # mfcc — same rank as the mel branch: (batch, channel, freq, time).
+        # A single unsqueeze left this 3-D and Conv2d rejected it.
         feat = mfcc_features(
             audio, self.sr, acfg["n_mfcc"], acfg["n_fft"],
             acfg["hop_length"], acfg["use_delta"], acfg["normalize"],
         )
-        return torch.from_numpy(feat).float().unsqueeze(0).to(self.device)  # (1, C, T)
+        return torch.from_numpy(feat).float().unsqueeze(0).unsqueeze(0).to(self.device)
 
     def _zero_visual(self) -> torch.Tensor:
         vcfg = self.cfg["visual"]
-        return torch.zeros(1, vcfg["max_frames"], 1404, device=self.device)
+        return torch.zeros(1, vcfg["max_frames"], LANDMARK_DIM, device=self.device)
 
     # ------------------------------------------------------------------
     # Public prediction API

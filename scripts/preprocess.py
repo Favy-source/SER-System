@@ -8,7 +8,7 @@ Usage:
 Outputs (written to datasets/processed/):
     mel/<stem>.npy          log-mel spectrogram  (n_mels, T)
     mfcc/<stem>.npy         MFCC + delta         (3*n_mfcc, T)
-    landmarks/<stem>.npy    facial landmarks     (max_frames, 1404)
+    landmarks/<stem>.npy    facial landmarks     (max_frames, LANDMARK_DIM)
     manifest.csv            unified metadata for all parsed samples
 """
 import sys

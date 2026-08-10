@@ -26,8 +26,9 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from src.constants import LANDMARK_DIM
 from src.datasets import EmotionDataset, LABEL2IDX, IDX2LABEL, UNIFIED
-from src.models.builder import build_model, is_multimodal
+from src.models.builder import build_model, feature_height, is_multimodal, n_frames
 
 
 def parse_args():
@@ -54,10 +55,11 @@ def predict(model, loader, device, multi):
     return np.array(all_labels), np.array(all_preds)
 
 
-def benchmark_latency(model, cfg, device, multi, n_runs):
-    n_mels = cfg["audio"]["n_mels"]
-    dummy_a = torch.randn(1, 1, n_mels, 130).to(device)
-    dummy_v = torch.zeros(1, 75, 1404).to(device)
+def benchmark_latency(model, cfg, device, multi, n_runs, feature="mel"):
+    # Shapes must come from the config the model was BUILT from, and from the
+    # feature it expects — otherwise an mfcc checkpoint gets a mel-shaped dummy.
+    dummy_a = torch.randn(1, 1, feature_height(cfg, feature), n_frames(cfg)).to(device)
+    dummy_v = torch.zeros(1, cfg["visual"]["max_frames"], LANDMARK_DIM).to(device)
 
     def infer():
         if multi:
@@ -95,7 +97,7 @@ def main():
     ckpt_cfg   = ckpt.get("cfg", cfg)
     feature    = ckpt.get("feature", "mel")
 
-    model = build_model(model_name, ckpt_cfg, len(UNIFIED)).to(device)
+    model = build_model(model_name, ckpt_cfg, len(UNIFIED), feature).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -106,7 +108,8 @@ def main():
 
     multi    = is_multimodal(model_name)
     modality = "multimodal" if multi else ("visual" if model_name == "visual_lstm" else "audio")
-    ds       = EmotionDataset(test_df, str(proc), modality, feature)
+    ds       = EmotionDataset(test_df, str(proc), modality, feature,
+                              max_frames=cfg["visual"]["max_frames"])
     loader   = DataLoader(ds, batch_size=32, shuffle=False, num_workers=4)
 
     labels, preds = predict(model, loader, device, multi)
@@ -137,7 +140,7 @@ def main():
 
     # latency benchmark
     print(f"\nLatency benchmark ({args.latency_runs} runs)...")
-    times = benchmark_latency(model, cfg, device, multi, args.latency_runs)
+    times = benchmark_latency(model, ckpt_cfg, device, multi, args.latency_runs, feature)
     lat_mean = times.mean()
     lat_p50  = np.percentile(times, 50)
     lat_p95  = np.percentile(times, 95)

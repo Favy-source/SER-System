@@ -64,8 +64,13 @@ class AudioCNNLSTM(nn.Module):
         lstm_hidden: int = 256,
         lstm_layers: int = 2,
         dropout: float = 0.3,
-        n_mels: int = 128,
+        n_freq: int = 128,
     ):
+        """n_freq — rows on the frequency axis of the input feature.
+
+        128 for a default log-mel spectrogram, 120 for MFCC + delta + delta-delta.
+        Use src.models.builder.feature_height() to derive it from a config.
+        """
         super().__init__()
         cnn_channels = cnn_channels or [32, 64, 128]
 
@@ -74,9 +79,10 @@ class AudioCNNLSTM(nn.Module):
             layers += [_ConvBlock(cnn_channels[i - 1], cnn_channels[i]), nn.MaxPool2d(2)]
         self.cnn = nn.Sequential(*layers)
 
-        # derive LSTM input size from a dummy forward pass
+        # derive LSTM input size from a dummy forward pass, so changing n_freq
+        # or the channel list needs no hand-computed shapes
         with torch.no_grad():
-            dummy = torch.zeros(1, 1, n_mels, 130)
+            dummy = torch.zeros(1, 1, n_freq, 130)
             out = self.cnn(dummy)
             _, C, F, _ = out.shape
             lstm_in = C * F
