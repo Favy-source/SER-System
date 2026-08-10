@@ -154,7 +154,7 @@ python3 -m pytest
 Expected:
 
 ```
-collected 171 items
+collected 176 items
 tests/test_api.py ....................            [ 15%]
 tests/test_datasets.py .................................  [ 41%]
 tests/test_features.py ................            [ 54%]

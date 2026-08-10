@@ -1,6 +1,6 @@
 # Testing
 
-171 tests across five modules, all passing in ~45 s on CPU with no corpora, no checkpoints, and no GPU.
+176 tests across five modules, all passing in ~51 s on CPU with no corpora, no checkpoints, and no GPU.
 
 - [Running the suite](#running-the-suite)
 - [Design principles](#design-principles)
@@ -18,7 +18,7 @@
 ## Running the suite
 
 ```bash
-python3 -m pytest                          # all 171
+python3 -m pytest                          # all 176
 python3 -m pytest tests/test_model.py      # one module
 python3 -m pytest -k websocket             # by name substring
 python3 -m pytest -k "not api"             # exclude
@@ -50,7 +50,7 @@ periodically to see them (that is how the `torch.cuda.amp.GradScaler` deprecatio
 Expected:
 
 ```
-collected 171 items
+collected 176 items
 tests/test_api.py ..................................      [ 20%]
 tests/test_datasets.py .................................   [ 40%]
 tests/test_features.py ................                    [ 50%]

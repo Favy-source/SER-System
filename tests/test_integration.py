@@ -650,3 +650,115 @@ def test_visual_track_still_goes_stale_when_abandoned():
     ab = AudioStreamBuffer(Engine(), input_sr=22050, visual=vb)
     r = ab.push(np.zeros(22050 * 4, dtype=np.float32).tobytes())
     assert r["visual_active"] is False, "an abandoned face track was still used"
+
+
+# ── Offline visual extraction (needs mediapipe) ────────────
+#
+# mediapipe is optional: audio-only training and ALL serving work without it,
+# because the browser produces landmarks for the live path. It is required only
+# to build landmarks/*.npy for TRAINING a fusion model, so these skip rather
+# than fail when it is absent.
+#
+# They exist because the extractor was silently broken: it used the legacy
+# `mp.solutions.face_mesh` namespace, which mediapipe 1.0 REMOVED. `import
+# mediapipe` still succeeded, so the ImportError guard passed and the failure
+# only appeared at call time as AttributeError — which preprocess.py catches per
+# file, meaning every video would have been logged as an error and the run would
+# have produced an audio-only dataset that looked successful.
+
+mediapipe_required = pytest.mark.skipif(
+    not __import__("src.features", fromlist=["_MEDIAPIPE"])._MEDIAPIPE,
+    reason="mediapipe not installed (optional: needed only to build training landmarks)",
+)
+
+
+def _draw_synthetic_face(t):
+    """A crude frontal face, good enough for MediaPipe's detector."""
+    import cv2
+    img = np.full((480, 640, 3), (90, 110, 130), np.uint8)
+    cx, cy = 320, 250
+    cv2.ellipse(img, (cx, cy), (110, 145), 0, 0, 360, (150, 180, 205), -1)
+    cv2.ellipse(img, (cx, cy - 150), (115, 60), 0, 0, 360, (40, 45, 55), -1)
+    for sx in (-42, 42):
+        cv2.ellipse(img, (cx + sx, cy - 35), (26, 14), 0, 0, 360, (250, 250, 250), -1)
+        cv2.circle(img, (cx + sx, cy - 35), 9, (60, 50, 45), -1)
+        cv2.ellipse(img, (cx + sx, cy - 55), (28, 8), 0, 200, 340, (50, 55, 65), 4)
+    cv2.line(img, (cx, cy - 25), (cx, cy + 25), (120, 150, 175), 6)
+    cv2.ellipse(img, (cx, cy + 30), (10, 8), 0, 0, 360, (110, 140, 165), -1)
+    cv2.ellipse(img, (cx, cy + 72), (44, 10 + int(8 * np.sin(t))), 0, 0, 360, (70, 60, 90), -1)
+    return img
+
+
+def _write_face_video(path, n_frames=50, fps=25.0):
+    import cv2
+    w = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (640, 480))
+    for i in range(n_frames):
+        w.write(_draw_synthetic_face(i * 0.3))
+    w.release()
+    return path
+
+
+@mediapipe_required
+def test_extract_visual_features_uses_the_tasks_api(tmp_path):
+    """The regression test: the extractor must not touch mp.solutions."""
+    from src.features import extract_visual_features
+    video = _write_face_video(tmp_path / "face.mp4", n_frames=50)
+    seq = extract_visual_features(str(video), max_frames=75, frame_size=(256, 256))
+
+    assert seq is not None, "no face detected in the synthetic video"
+    assert seq.shape == (75, LANDMARK_DIM)
+    assert seq.dtype == np.float32
+    assert not np.isnan(seq).any()
+
+
+@mediapipe_required
+def test_extract_visual_features_pads_at_the_end(tmp_path):
+    """Short clips zero-pad at the END, matching how the Dataset zero-fills."""
+    from src.features import extract_visual_features
+    video = _write_face_video(tmp_path / "short.mp4", n_frames=20)
+    seq = extract_visual_features(str(video), max_frames=75, frame_size=(256, 256))
+    assert seq is not None
+
+    nonzero = (np.abs(seq).sum(1) > 0)
+    assert nonzero[:20].all(),  "real frames should lead"
+    assert not nonzero[25:].any(), "padding should trail"
+
+
+@mediapipe_required
+def test_extract_visual_features_output_feeds_the_model(tmp_path):
+    """The whole point: extracted landmarks must load into VisualLSTM."""
+    from src.features import extract_visual_features
+    video = _write_face_video(tmp_path / "face.mp4")
+    seq = extract_visual_features(str(video), max_frames=CFG["visual"]["max_frames"],
+                                  frame_size=(256, 256))
+    assert seq is not None
+
+    model = build_model("visual_lstm", CFG, N_CLASSES)
+    model.eval()
+    with torch.no_grad():
+        out = model(torch.from_numpy(seq).unsqueeze(0))
+    assert out.shape == (1, N_CLASSES)
+    assert not torch.isnan(out).any()
+
+
+@mediapipe_required
+def test_extract_visual_features_returns_none_without_a_face(tmp_path):
+    import cv2
+    from src.features import extract_visual_features
+    p = tmp_path / "noise.mp4"
+    w = cv2.VideoWriter(str(p), cv2.VideoWriter_fourcc(*"mp4v"), 25.0, (320, 240))
+    rng = np.random.default_rng(0)
+    for _ in range(30):
+        w.write(rng.integers(0, 255, (240, 320, 3), dtype=np.uint8))
+    w.release()
+    assert extract_visual_features(str(p)) is None
+
+
+@mediapipe_required
+def test_extract_visual_features_raises_when_model_missing(tmp_path, monkeypatch):
+    """A missing .task must be loud, not a silent audio-only dataset."""
+    import src.features as F
+    video = _write_face_video(tmp_path / "face.mp4", n_frames=5)
+    monkeypatch.setattr(F, "face_landmarker_model_path", lambda: None)
+    with pytest.raises(FileNotFoundError, match="face_landmarker.task"):
+        F.extract_visual_features(str(video))

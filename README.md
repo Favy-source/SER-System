@@ -105,7 +105,7 @@ run on real data:
 | **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
 | **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
 
-**Test suite: 171 tests, all passing** (`python3 -m pytest`, ~45 s on CPU with a complete install).
+**Test suite: 176 tests, all passing** (`python3 -m pytest`, ~45 s on CPU with a complete install).
 
 Because no checkpoint exists, the backend starts in a degraded mode: `/health` reports
 `model_loaded: false` and the prediction endpoints return **503**. This is intentional — the server
@@ -764,7 +764,7 @@ Key-by-key reference: [docs/configuration.md](docs/configuration.md).
 ## Testing
 
 ```bash
-python3 -m pytest                      # all 171
+python3 -m pytest                      # all 176
 python3 -m pytest tests/test_model.py  # one module
 python3 -m pytest -k websocket         # by name
 ```
@@ -859,11 +859,16 @@ model itself was built from the checkpoint's config.
   188 KB int8 weights, 79 KB peak activation and 29 MMAC/s sustained, which does fit — but it is a
   different model that has not been trained, and `librosa` cannot run on an MCU, so the on-device
   feature extractor will be separate code needing validation against the Python reference.
-- **The OFFLINE visual path is still unexercised.** `mediapipe` is not installed in the development
-  environment, so `extract_visual_features` — the Python FaceMesh extractor that turns training videos
-  into `landmarks/*.npy` — has never run against a real video. The dimension contract is enforced at
-  runtime rather than assumed, but the extraction itself remains untested. This blocks *training* a
-  fusion model, not serving one.
+- **~~The OFFLINE visual path is unexercised.~~ Verified — and it was broken.** Installing mediapipe
+  1.0 exposed that `extract_visual_features` used `mp.solutions.face_mesh`, a namespace **removed in
+  mediapipe 1.0**. `import mediapipe` still succeeded, so the `ImportError` guard passed and the
+  failure appeared only at call time as `AttributeError`, which `preprocess.py` catches per file —
+  meaning every video would have been logged as an error and the run would have produced an
+  **audio-only dataset that looked successful**. Migrated to the MediaPipe Tasks API
+  (`mediapipe.tasks.python.vision.FaceLandmarker`, present in 0.10.x too), verified against a
+  synthetic face: `(75, 1404)`, correct end-padding, no NaNs, and the output feeds `VisualLSTM`.
+  Five tests cover it, skipping when mediapipe is absent since it is optional for audio-only work
+  and for all serving.
 
   The **live** visual path, by contrast, is now verified with a real face: browser MediaPipe →
   raw landmarks → tagged WebSocket → shared `normalize_landmarks` → the fusion model's visual branch,
