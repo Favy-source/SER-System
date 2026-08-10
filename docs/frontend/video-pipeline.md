@@ -1,5 +1,10 @@
 # Video capture pipeline
 
+**Status: verified end to end with a real face** (Chrome, 2026-08-10) — face tracked on the GPU
+delegate at 8 fps, and predictions reporting `modalities: ["audio", "visual"]`. The WebGL-less case
+(embedded webviews, software rendering) falls back to the CPU delegate; see
+[Troubleshooting](#troubleshooting).
+
 How webcam frames become face landmarks on the wire. Implemented in
 [`useFaceTracking.js`](../../frontend/src/hooks/useFaceTracking.js) and
 [`VideoCapture.jsx`](../../frontend/src/components/VideoCapture.jsx).
@@ -267,6 +272,13 @@ script's download failed — most likely no network at install time. Re-run
 
 Same secure-context rule as the microphone: `https://` or `http://localhost`.
 Over plain HTTP to a LAN IP, `navigator.mediaDevices` is undefined.
+
+### `emscripten_webgl_create_context() returned error 0` / `kGpuService` not provided
+
+MediaPipe could not create a WebGL context, so the GPU delegate failed. The hook catches this and
+retries on the **CPU delegate** automatically — the chip beside the fps counter shows which one is
+live. If both fail, the context has no media/GL support at all: an embedded webview such as VS Code's
+Simple Browser cannot do WebGL *or* camera access. Open `http://localhost:3000` in Chrome or Firefox.
 
 ### Status stays on `loading`
 

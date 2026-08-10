@@ -93,14 +93,14 @@ run on real data:
 
 | Component | Status | Notes |
 |---|---|---|
-| Feature extraction | ✅ Implemented, tested | Audio path verified; visual path unverified (see below) |
+| Feature extraction | ✅ Implemented, tested | Audio verified; live landmark path verified; offline video extraction unverified |
 | Dataset parsers | ✅ Implemented, tested | RAVDESS, CREMA-D, MSP-IMPROV |
 | Speaker-independent split | ✅ Implemented, tested | Disjointness + reproducibility asserted |
 | 6 model architectures | ✅ Implemented, tested | Forward shape, gradient flow, determinism |
 | Training harness | ✅ Implemented | Never executed on real data |
 | Evaluation harness | ✅ Implemented | Never executed on real data |
 | FastAPI backend | ✅ Implemented, tested | 37 tests; mocked engine plus real-checkpoint e2e |
-| React front end | ✅ Implemented | Audio + webcam landmarks; verified rendering headlessly, no JS unit tests |
+| React front end | ✅ Implemented, verified live | Real mic + real webcam confirmed multimodal in Chrome; no JS unit tests |
 | **Trained checkpoints** | ❌ None | only untrained demo files — see [Try it without training](#try-it-without-training) |
 | **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
 | **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
@@ -351,6 +351,10 @@ If the face track drops out — user leaves frame, camera covered, client cannot
 the prediction degrades to `["audio"]` and says so, rather than quietly feeding the model a stale or zero
 face and overstating what it did. The UI surfaces this too: the status bar shows the modality list, green
 when both fired.
+
+**Verified with a real face and a real microphone** (Chrome, 2026-08-10, `attention` checkpoint): face
+tracked on the GPU delegate at 8 fps, 29 predictions, 311 ms per window, and the status bar reporting
+`audio + visual` in green. That was the last claim in this repository resting only on Python tests.
 
 Setup notes: the vendored assets (~34 MB WASM + 3.6 MB model) live in `frontend/public/mediapipe/` and
 are gitignored. A failed download is non-fatal — face tracking is simply unavailable and the app runs
@@ -855,10 +859,16 @@ model itself was built from the checkpoint's config.
   188 KB int8 weights, 79 KB peak activation and 29 MMAC/s sustained, which does fit — but it is a
   different model that has not been trained, and `librosa` cannot run on an MCU, so the on-device
   feature extractor will be separate code needing validation against the Python reference.
-- **The visual path is still unexercised end to end.** `mediapipe` is not installed in the
-  development environment, so `extract_visual_features` has never run against a real video. The
-  dimension contract is now enforced at runtime rather than assumed, but the extraction itself
-  remains untested.
+- **The OFFLINE visual path is still unexercised.** `mediapipe` is not installed in the development
+  environment, so `extract_visual_features` — the Python FaceMesh extractor that turns training videos
+  into `landmarks/*.npy` — has never run against a real video. The dimension contract is enforced at
+  runtime rather than assumed, but the extraction itself remains untested. This blocks *training* a
+  fusion model, not serving one.
+
+  The **live** visual path, by contrast, is now verified with a real face: browser MediaPipe →
+  raw landmarks → tagged WebSocket → shared `normalize_landmarks` → the fusion model's visual branch,
+  with the prediction reporting `modalities: ["audio", "visual"]`. Confirmed in Chrome on 2026-08-10
+  against `attention`: 29 predictions, 311 ms per window, GPU delegate at 8 fps.
 - **Acted, non-clinical, non-Nigerian corpora.** The central external-validity limitation, and the
   reason the roadmap starts where it does.
 
