@@ -112,21 +112,36 @@ def main():
     # ── Slide 4: the unsupported accuracy claim ──
     edit(4, "Text 15",
          f"{acc:.1f}% accuracy · {f1:.3f} macro-F1 — speaker-independent "
-         f"({spk} held-out actors, n={n}). {lat:.0f} ms mean inference, {p95:.0f} ms p95.",
+         f"({spk} held-out actors, n={n}). {lat:.0f} ms model inference; "
+         f"~110 ms end-to-end in-browser.",
          "Replaced '~80% on internal validation', which no result file supports. "
-         "The real figure is speaker-independent and therefore defensible.")
+         f"Also distinguishes the {lat:.0f} ms benchmark (model forward pass only) "
+         "from the ~110 ms the running dashboard actually reports end-to-end — a "
+         "panel would reasonably read a bare '22 ms' as the latter.")
 
     edit(4, "Text 2",
-         "A working real-time multimodal system — audio and webcam, three fusion "
-         "strategies implemented, evaluated speaker-independently.",
-         "Sharpened: the prototype is multimodal and already measured, not "
-         "'under validation'.")
+         "A working real-time system — live audio and webcam capture, three fusion "
+         "architectures implemented, audio model evaluated speaker-independently.",
+         "Precise about what is measured. The speaker-independent evaluation is of "
+         "the AUDIO model; the fusion architectures are built but not yet trained.")
 
     edit(4, "Text 19",
-         "Audio + visual fusion verified live in-browser. Honest limitation: high-arousal "
-         "emotions reach 0.88 recall, happy 0.08 — the model has learned arousal, not valence.",
-         "States the known weakness before a panel finds it. Naming your own "
-         "limitation is the strongest available signal of research maturity.")
+         "Live audio + webcam capture verified in-browser (face tracked, 4 fps, GPU). "
+         "The trained checkpoint is audio-only — training and validating fusion is the "
+         "proposed research.",
+         "CORRECTION. An earlier revision claimed 'audio + visual fusion verified "
+         "live in-browser'. Running the system contradicts that: it displays "
+         "'Loaded model is audio-only, so the camera cannot contribute.' Capture "
+         "works both ways; the only trained checkpoint is audio-only and every "
+         "fusion checkpoint in models/ is DEMO_UNTRAINED.")
+
+    edit(4, "Text 17",
+         "Real-time pipeline (FastAPI / WebSockets) with a React dashboard. "
+         "Honest limitation: 0.88 recall on high-arousal emotions, 0.08 on happy — "
+         "arousal is learned, valence is not.",
+         "Moves the limitation here now that the fusion status occupies Text 19. "
+         "Naming your own weakness before a panel finds it is the strongest "
+         "available signal of research maturity.")
 
     edit(4, "Text 22",
          "Private repository · full code, tests and results available on request",
