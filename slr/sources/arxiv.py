@@ -19,6 +19,7 @@ ROLE IN THE REVIEW
 
 API: https://info.arxiv.org/help/api/user-manual.html
 """
+import time
 import xml.etree.ElementTree as ET
 from typing import Iterator, Optional
 
@@ -83,21 +84,41 @@ def search(query: str, year_from: int, year_to: int, *,
     """`query` must already be in arXiv search_query syntax (see booleanq.to_arxiv)."""
     dated = (f"({query}) AND submittedDate:"
              f"[{year_from}01010000 TO {year_to}12312359]")
-    start = 0
+    start, total = 0, None
     while start < max_records:
         url = f"{BASE}?search_query={dated}&start={start}"
-        xml = fetch(BASE, {
-            "search_query": dated,
-            "start": start,
-            "max_results": min(PAGE, max_records - start),
-            "sortBy": "submittedDate",
-            "sortOrder": "descending",
-        }, parse="text", use_cache=use_cache)
-        try:
-            root = ET.fromstring(xml)
-        except ET.ParseError:
-            return
-        entries = root.findall("atom:entry", NS)
+        want = min(PAGE, max_records - start)
+
+        # arXiv returns TRANSIENT EMPTY PAGES under load — a 200 response with a
+        # well-formed feed and no <entry> elements, mid-way through a result set
+        # it has just told us is much larger. Treating that as "exhausted" ends
+        # pagination early and silently under-retrieves: two runs of this
+        # pipeline differed by ~2,000 records with zero errors logged, because
+        # run 1 stopped short on pages that run 2 fetched fine.
+        #
+        # So an empty page is only accepted as the end when opensearch's own
+        # totalResults agrees we have seen everything. Otherwise it is retried.
+        entries, root = [], None
+        for attempt in range(3):
+            xml = fetch(BASE, {
+                "search_query": dated, "start": start, "max_results": want,
+                "sortBy": "submittedDate", "sortOrder": "descending",
+            }, parse="text", use_cache=use_cache and attempt == 0)
+            try:
+                root = ET.fromstring(xml)
+            except ET.ParseError:
+                root = None
+            if root is None:
+                continue
+            if total is None:
+                el = root.find("opensearch:totalResults", NS)
+                if el is not None and (el.text or "").isdigit():
+                    total = int(el.text)
+            entries = root.findall("atom:entry", NS)
+            if entries or (total is not None and start >= total):
+                break
+            time.sleep(3 * (attempt + 1))   # arXiv asks for 3s between requests
+
         if not entries:
             return
         for e in entries:
@@ -105,6 +126,8 @@ def search(query: str, year_from: int, year_to: int, *,
             if rec:
                 yield rec
         start += len(entries)
+        if total is not None and start >= total:
+            return
 
 
 def count(query: str, year_from: int, year_to: int, *, use_cache: bool = True) -> int:

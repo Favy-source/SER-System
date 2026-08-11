@@ -20,12 +20,22 @@ WHAT THIS DOES AND DOES NOT DECIDE
     "review" and a blank `my_decision` column for the reviewer to fill in.
     The include/exclude judgement stays human — see slr/screen.py.
 
-REPRODUCIBILITY
-    Every API response is cached under slr/cache/ (gitignored). Re-running
-    reproduces the identical corpus; deleting the cache deliberately refreshes
-    it against the live databases. The counts in prisma.json therefore refer to
-    a fixed, inspectable snapshot rather than to whatever the databases happen
-    to contain today.
+REPRODUCIBILITY — AND ITS LIMIT
+    Every API response is cached under slr/cache/ (gitignored). Once the cache
+    exists, re-running reproduces the identical corpus, and prisma.json refers to
+    that fixed snapshot rather than to whatever the databases hold today.
+
+    The limit, stated because it was measured rather than assumed: the FIRST
+    fetch is at the mercy of live API behaviour. Two runs of this pipeline
+    differed by ~2,000 retrieved records with zero errors logged, because arXiv
+    served transient empty pages mid-result-set and pagination accepted them as
+    the end of the results. That specific cause is fixed (sources/arxiv.py
+    re-checks against opensearch:totalResults before stopping), but the general
+    point stands: a cold run is reproducible only up to API weather.
+
+    The practical consequence for the review is that the cache IS the primary
+    evidence. Preserve it alongside the outputs, and treat a cold re-run as a
+    new search that needs its own Search Log row, not as a replication.
 """
 import argparse
 import csv

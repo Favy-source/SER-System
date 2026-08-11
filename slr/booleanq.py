@@ -28,6 +28,7 @@ PRECEDENCE
 """
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import List, Union
 
 
@@ -172,9 +173,24 @@ class _Parser:
         return Term(val)
 
 
-def parse(query: str) -> Node:
-    """Parse a protocol search string into an evaluable AST."""
+@lru_cache(maxsize=256)
+def _parse_cached(query: str) -> Node:
     return _Parser(tokenise(query)).parse()
+
+
+def parse(query: str) -> Node:
+    """Parse a protocol search string into an evaluable AST.
+
+    Memoised, and deliberately so. Screening evaluates every record against
+    every search string, so an un-cached parse meant re-tokenising and
+    re-compiling ~20 regexes per record per string — roughly 316,000 regex
+    compilations for a 1,757-record corpus, which turned a seconds-long
+    screening pass into a run that outlived a 15-minute timeout.
+
+    Sharing AST nodes between calls is safe: evaluation never mutates them, and
+    the compiled-regex cache on Term is exactly what we want to reuse.
+    """
+    return _parse_cached(query)
 
 
 def matches(query_or_ast, title: str, abstract: str = "") -> bool:

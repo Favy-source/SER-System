@@ -43,7 +43,10 @@ RATE_LIMIT = {
     "api.openalex.org": 0.12,
     "api.crossref.org": 0.25,
     "eutils.ncbi.nlm.nih.gov": 0.40,   # NCBI: max 3 req/s without an API key
-    "export.arxiv.org": 3.10,          # arXiv explicitly asks for 3 s between calls
+    # arXiv asks for 3 s between calls and enforces it with 429s. Raised above
+    # the documented minimum after a test run tripped the limit: being throttled
+    # mid-review is far more expensive than the extra seconds.
+    "export.arxiv.org": 4.00,
 }
 _last_call: Dict[str, float] = {}
 

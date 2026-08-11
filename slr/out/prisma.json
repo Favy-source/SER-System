@@ -1,78 +1,95 @@
 {
   "generated": "2026-08-11",
   "protocol_version": "2.0",
+  "screening_tiers": {
+    "counts": {
+      "T1": 277,
+      "T2": 947,
+      "T3": 138,
+      "T4": 667,
+      "X": 31
+    },
+    "meaning": {
+      "T1": "satisfies 2+ protocol strings, retrieved by search \u2014 strongest candidates",
+      "T2": "satisfies 1 protocol string, retrieved by search",
+      "T3": "satisfies a protocol string, reached via citation traversal",
+      "T4": "reached via citation traversal only, satisfies no string \u2014 widest net",
+      "X": "auto-excluded; no manual screening needed"
+    },
+    "note": "A reading order for manual screening, not a decision and not a quality ranking. Every tier is screened; a T4 record can still be included."
+  },
   "window": [
     2015,
     2026
   ],
   "identification": {
-    "records_from_databases": 1193,
+    "records_from_databases": 1577,
     "records_from_other_methods": 949,
-    "total_identified": 2142,
-    "duplicates_removed": 385,
-    "records_after_deduplication": 1757
+    "total_identified": 2526,
+    "duplicates_removed": 466,
+    "records_after_deduplication": 2060
   },
   "automated_screening": {
-    "auto_excluded_total": 29,
+    "auto_excluded_total": 31,
     "auto_excluded_by_criterion": {
       "IC5": 10,
-      "EC3": 18,
+      "EC3": 20,
       "EC5": 1
     },
-    "records_awaiting_manual_screening": 1728,
+    "records_awaiting_manual_screening": 2029,
     "note": "Automated screening applies MECHANICAL criteria only (IC2 year, IC5 language, EC3 non-human/synthesis, EC5 non-archival, and the protocol Boolean predicate). No record is auto-included; IC3, IC4, EC1 and EC2 require the reviewer's judgement."
   },
   "reviewable_corpus": {
     "by_search_string": {
-      "S1": 242,
-      "S2": 261,
-      "S3": 55,
-      "S4": 235,
-      "S5": 49,
-      "S6": 18,
-      "S8": 270,
-      "S9": 208
+      "S1": 308,
+      "S2": 359,
+      "S3": 85,
+      "S4": 295,
+      "S5": 51,
+      "S6": 19,
+      "S8": 340,
+      "S9": 275
     },
     "by_year": {
       "2015": 33,
       "2016": 34,
       "2017": 40,
-      "2018": 66,
-      "2019": 60,
-      "2020": 87,
+      "2018": 67,
+      "2019": 63,
+      "2020": 90,
       "2021": 147,
-      "2022": 202,
-      "2023": 195,
-      "2024": 222,
-      "2025": 387,
-      "2026": 255
+      "2022": 205,
+      "2023": 198,
+      "2024": 275,
+      "2025": 520,
+      "2026": 357
     },
     "stratified": {
-      "2015_2019": 233,
-      "2020_2026": 1495
+      "2015_2019": 237,
+      "2020_2026": 1792
     },
     "flags": {
-      "venue_type_unknown": 410,
-      "language_unreported": 163,
-      "no_string_match_found_via_citation": 668,
-      "preprint_only": 101,
-      "non_human_terms_in_abstract": 207,
-      "access_unknown": 481,
-      "abstract_missing": 229,
-      "synthesis_terms_present": 6
+      "venue_type_unknown": 417,
+      "language_unreported": 153,
+      "no_string_match_found_via_citation": 667,
+      "preprint_only": 389,
+      "non_human_terms_in_abstract": 230,
+      "synthesis_terms_present": 9,
+      "access_unknown": 478,
+      "abstract_missing": 227
     }
   },
   "threats_evidence": {
-    "screened_on_title_only": 229,
-    "language_unreported": 163,
-    "access_unknown": 481,
-    "preprint_only": 101,
+    "screened_on_title_only": 227,
+    "language_unreported": 153,
+    "access_unknown": 478,
+    "preprint_only": 389,
     "single_reviewer": true,
     "note": "These figures populate the Threats to Validity sheet with measured numbers rather than generic statements."
   },
   "cache": {
-    "entries": 351,
-    "bytes": 50066621
+    "entries": 432,
+    "bytes": 78465802
   },
   "snowball_seeds": {
     "10.1609/aaai.v34i02.5492": {

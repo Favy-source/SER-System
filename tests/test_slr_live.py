@@ -202,3 +202,28 @@ def test_known_relevant_work_satisfies_at_least_one_protocol_string(doi, label):
             if booleanq.matches(s["string"], r.title, r.abstract)]
     assert hits, (f"{label} satisfies NO protocol search string — the strings are "
                   f"too narrow.\n  title: {r.title}\n  abstract: {r.abstract[:200]}")
+
+
+def test_arxiv_pagination_does_not_stop_short_of_total_results():
+    """Regression: an empty page mid-result-set used to end pagination.
+
+    Two pipeline runs differed by ~2,000 records with no errors logged because
+    arXiv served transient empty pages and the loop accepted them as the end.
+    Retrieval that silently under-collects leaves no trace in the output, which
+    makes it the worst possible failure mode for a systematic review.
+    """
+    from slr.sources.base import SourceError
+    q = booleanq.to_arxiv('"speech emotion recognition"')
+    try:
+        total = arxiv.count(q, Y0, Y1)
+        got = list(arxiv.search(q, Y0, Y1, max_records=250))
+    except SourceError as e:
+        # A 429 means the test could not RUN, which is not the same as passing.
+        # Skipping says so out loud rather than reporting a green tick.
+        if "429" in str(e):
+            pytest.skip(f"arXiv rate-limited this run, test not executed: {e}")
+        raise
+    assert total > 250, "need a multi-page result set to exercise pagination"
+    assert len(got) >= 250, \
+        f"pagination stopped at {len(got)} of an available {total}"
+    assert len({r.source_id for r in got}) == len(got), "paged records repeated"

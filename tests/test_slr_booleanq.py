@@ -205,3 +205,41 @@ def test_arxiv_phrase_decomposition_drops_stopwords():
 def test_crossref_query_is_a_bag_of_words_not_a_boolean():
     q = booleanq.api_query(S["S1"])
     assert "AND" not in q and "OR" not in q and "(" not in q
+
+
+# ── performance contract ───────────────────────────────────
+
+def test_parse_is_memoised():
+    """Screening evaluates every record against every string. An un-cached parse
+    meant ~316,000 regex compilations for a 1,757-record corpus and turned the
+    screening pass into a run that outlived a 15-minute timeout."""
+    booleanq._parse_cached.cache_clear()
+    q = S["S1"]
+    for _ in range(50):
+        booleanq.matches(q, "Multimodal emotion recognition", "audio-visual fusion")
+    info = booleanq._parse_cached.cache_info()
+    assert info.misses == 1, "the string should be parsed exactly once"
+    assert info.hits == 49
+
+
+def test_screening_a_realistic_corpus_stays_fast():
+    """A guard on the whole predicate path, not just the parser."""
+    import time
+    titles = ["Multimodal emotion recognition with cross-modal attention"] * 400
+    abstract = "We fuse speech and facial expression features and report latency. " * 6
+    t0 = time.time()
+    for t in titles:
+        for s in protocol.SEARCH_STRINGS:
+            booleanq.matches(s["string"], t, abstract)
+    elapsed = time.time() - t0
+    assert elapsed < 5.0, f"400 records x {len(protocol.SEARCH_STRINGS)} strings took {elapsed:.1f}s"
+
+
+def test_cached_asts_are_not_mutated_by_evaluation():
+    """Memoisation is only safe because matching never mutates the AST."""
+    a = booleanq.parse(S["S6"])
+    b = booleanq.parse(S["S6"])
+    assert a is b, "same string should yield the same cached AST"
+    before = repr(a)
+    booleanq.matches(S["S6"], "Speech emotion recognition", "facial expression recognition")
+    assert repr(a) == before
