@@ -178,6 +178,35 @@ def main():
          "Adds the systematic review. A registered protocol executed as code is "
          "concrete evidence of research method, which is what the panel is assessing.")
 
+    # ── Slide 4: fill the empty screenshot placeholder ──
+    #
+    # The deck shipped with a dashed box reading "Live-dashboard screenshot —
+    # add here". An unfilled placeholder on a scholarship slide is worse than no
+    # box at all, so it is filled with a real measured figure. A live screenshot
+    # is still the better artefact if one can be captured; swapping it in means
+    # replacing this picture and restoring the caption.
+    fig = ROOT / "docs/presentation/fig_per_class_recall.png"
+    slide4 = s[3]
+    box = find(slide4, "Shape 20")          # the dashed placeholder frame
+    caption = find(slide4, "Text 21")       # "Live-dashboard screenshot — add here"
+    if fig.exists() and box is not None:
+        pad = 60000                          # ~0.07in inset so the frame still reads
+        slide4.shapes.add_picture(
+            str(fig),
+            box.left + pad, box.top + pad,
+            width=box.width - 2 * pad,
+            height=box.height - 2 * pad - 300000,   # leave room for the caption
+        )
+        if caption is not None:
+            set_text(caption, "")
+        # The repository caption sits below the figure rather than over it.
+        cap2 = find(slide4, "Text 22")
+        if cap2 is not None:
+            cap2.top = box.top + box.height - 330000
+        changes.append((4, "Shape 20", "Live-dashboard screenshot — add here",
+                        "Filled the empty placeholder with the measured per-class "
+                        "recall figure. Swap for a live screenshot if you capture one."))
+
     prs.save(DST)
 
     print(f"Wrote {DST.relative_to(ROOT)}\n")
