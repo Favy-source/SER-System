@@ -81,13 +81,20 @@ const args = [
 if (video) args.push(`--use-file-for-fake-video-capture=${resolve(video)}`)
 if (audio) args.push(`--use-file-for-fake-audio-capture=${resolve(audio)}`)
 
+const videoDir = flag('--record')
+
 const chromium = resolveChromium()
 const browser = await chromium.launch({ headless: true, channel: 'chromium', args })
-const ctx = await browser.newContext({
+const ctxOpts = {
   viewport: { width: 1600, height: 1000 },
-  deviceScaleFactor: 2,
+  deviceScaleFactor: videoDir ? 1 : 2,   // recording at 2x produces a huge file
   permissions: ['camera', 'microphone'],
-})
+}
+if (videoDir) {
+  // Playwright writes the video on context.close(), not on page.close().
+  ctxOpts.recordVideo = { dir: videoDir, size: { width: 1600, height: 1000 } }
+}
+const ctx = await browser.newContext(ctxOpts)
 const page = await ctx.newPage()
 
 const errors = []
@@ -104,7 +111,7 @@ await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 })
 const actions = []
 
 const camSwitch = page.locator('label.switch').first()
-if (await camSwitch.count().catch(() => 0)) {
+if (!argv.includes('--no-camera') && await camSwitch.count().catch(() => 0)) {
   await camSwitch.click().catch(() => {})
   actions.push('camera toggle')
   await page.waitForTimeout(4000)   // WASM load + first face lock
@@ -130,10 +137,12 @@ const state = await page.evaluate(() => ({
   canvases: [...document.querySelectorAll('canvas')].map((c) => ({ w: c.width, h: c.height })),
 }))
 
-await page.screenshot({ path: out, fullPage: false })
+if (out) await page.screenshot({ path: out, fullPage: false })
+const videoPath = videoDir ? await page.video()?.path() : null
+await ctx.close()          // flushes the video file
 await browser.close()
 
 console.log(JSON.stringify({
-  actions, screenshot: out,
+  actions, screenshot: out, video: videoPath,
   consoleErrors: errors.slice(0, 8), ...state,
 }, null, 2))

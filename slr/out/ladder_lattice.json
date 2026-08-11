@@ -1,0 +1,1007 @@
+{
+ "clauses": [
+  "multimodal (+2)",
+  "emotion recognition",
+  "compress* (+3)",
+  "Raspberry Pi (+3)",
+  "latency (+2)",
+  "clinical (+3)",
+  "privacy (+2)"
+ ],
+ "clause_text": [
+  "(multimodal OR three modalit* OR trimodal)",
+  "emotion recognition",
+  "(compress* OR quantiz* OR distill* OR prun*)",
+  "(Raspberry Pi OR Jetson OR edge OR on-device)",
+  "(latency OR real-time OR ms)",
+  "(clinical OR patient OR caregiving OR healthcare)",
+  "(privacy OR federated OR differential privacy)"
+ ],
+ "pool": 1062,
+ "lattice": {
+  "1111111": 0,
+  "0111111": 0,
+  "1011111": 0,
+  "1101111": 0,
+  "1110111": 0,
+  "1111011": 0,
+  "1111101": 1,
+  "1111110": 0,
+  "0011111": 0,
+  "0101111": 0,
+  "0110111": 0,
+  "0111011": 0,
+  "0111101": 1,
+  "0111110": 0,
+  "1001111": 0,
+  "1010111": 0,
+  "1011011": 0,
+  "1011101": 1,
+  "1011110": 0,
+  "1100111": 3,
+  "1101011": 1,
+  "1101101": 3,
+  "1101110": 1,
+  "1110011": 1,
+  "1110101": 1,
+  "1110110": 1,
+  "1111001": 1,
+  "1111010": 0,
+  "1111100": 1,
+  "0001111": 0,
+  "0010111": 0,
+  "0011011": 0,
+  "0011101": 1,
+  "0011110": 0,
+  "0100111": 5,
+  "0101011": 2,
+  "0101101": 9,
+  "0101110": 3,
+  "0110011": 2,
+  "0110101": 1,
+  "0110110": 1,
+  "0111001": 2,
+  "0111010": 0,
+  "0111100": 4,
+  "1000111": 3,
+  "1001011": 1,
+  "1001101": 3,
+  "1001110": 1,
+  "1010011": 1,
+  "1010101": 1,
+  "1010110": 1,
+  "1011001": 1,
+  "1011010": 0,
+  "1011100": 1,
+  "1100011": 9,
+  "1100101": 7,
+  "1100110": 9,
+  "1101001": 4,
+  "1101010": 2,
+  "1101100": 8,
+  "1110001": 2,
+  "1110010": 4,
+  "1110100": 3,
+  "1111000": 3,
+  "0000111": 7,
+  "0001011": 4,
+  "0001101": 11,
+  "0001110": 4,
+  "0010011": 2,
+  "0010101": 1,
+  "0010110": 1,
+  "0011001": 2,
+  "0011010": 0,
+  "0011100": 4,
+  "0100011": 24,
+  "0100101": 23,
+  "0100110": 29,
+  "0101001": 17,
+  "0101010": 11,
+  "0101100": 39,
+  "0110001": 8,
+  "0110010": 7,
+  "0110100": 10,
+  "0111000": 10,
+  "1000011": 10,
+  "1000101": 7,
+  "1000110": 10,
+  "1001001": 5,
+  "1001010": 2,
+  "1001100": 8,
+  "1010001": 2,
+  "1010010": 4,
+  "1010100": 6,
+  "1011000": 3,
+  "1100001": 25,
+  "1100010": 31,
+  "1100100": 34,
+  "1101000": 12,
+  "1110000": 33,
+  "0000011": 37,
+  "0000101": 28,
+  "0000110": 36,
+  "0001001": 25,
+  "0001010": 15,
+  "0001100": 47,
+  "0010001": 10,
+  "0010010": 8,
+  "0010100": 18,
+  "0011000": 12,
+  "0100001": 126,
+  "0100010": 155,
+  "0100100": 152,
+  "0101000": 91,
+  "0110000": 109,
+  "1000001": 34,
+  "1000010": 41,
+  "1000100": 42,
+  "1001000": 13,
+  "1010000": 41,
+  "1100000": 225,
+  "0000001": 188,
+  "0000010": 203,
+  "0000100": 199,
+  "0001000": 169,
+  "0010000": 138,
+  "0100000": 790,
+  "1000000": 289,
+  "0000000": 1062
+ },
+ "survivors": {
+  "1111101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0111101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1011101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1100111": [
+   {
+    "t": "From Neural Networks to Emotional Networks: A Systematic Review of EEG-Based Emotion Recognition in Cognitive Neuroscien",
+    "y": 2025,
+    "v": "Brain Sciences",
+    "d": "10.3390/brainsci15030220",
+    "c": 122
+   },
+   {
+    "t": "When and How to Integrate Multimodal Large Language Models in College Psychotherapy: Perspectives from Multi-stakeholder",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "A User-Centric Context-Aware Framework for Real-Time Optimisation of Multimedia Data Privacy Protection, and Information",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25196105",
+    "c": 0
+   }
+  ],
+  "1101011": [
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   }
+  ],
+  "1101101": [
+   {
+    "t": "Enhancing Emotion Recognition through Federated Learning: A Multimodal Approach with Convolutional Neural Networks",
+    "y": 2024,
+    "v": "Applied Sciences",
+    "d": "10.3390/app14041325",
+    "c": 34
+   },
+   {
+    "t": "FedMultiEmo: Real-Time Emotion Recognition via Multimodal Federated Learning",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1101110": [
+   {
+    "t": "MSGM: a multi-scale spatiotemporal graph Mamba for EEG emotion recognition.",
+    "y": 2026,
+    "v": "Frontiers in neuroscience",
+    "d": "10.3389/fnins.2026.1665145",
+    "c": 0
+   }
+  ],
+  "1110011": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   }
+  ],
+  "1110101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1110110": [
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   }
+  ],
+  "1111001": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1111100": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0011101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0100111": [
+   {
+    "t": "From Neural Networks to Emotional Networks: A Systematic Review of EEG-Based Emotion Recognition in Cognitive Neuroscien",
+    "y": 2025,
+    "v": "Brain Sciences",
+    "d": "10.3390/brainsci15030220",
+    "c": 122
+   },
+   {
+    "t": "When and How to Integrate Multimodal Large Language Models in College Psychotherapy: Perspectives from Multi-stakeholder",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Use of Artificial Intelligence in Mental Healthcare, Health Psychology, and Related Research: A Narrative Review to Addr",
+    "y": 2025,
+    "v": "Health science reports",
+    "d": "10.1002/hsr2.71595",
+    "c": 0
+   },
+   {
+    "t": "A User-Centric Context-Aware Framework for Real-Time Optimisation of Multimedia Data Privacy Protection, and Information",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25196105",
+    "c": 0
+   },
+   {
+    "t": "mm-HrtEMO: Non-Invasive Emotion Recognition via Heart Rate Using mm-Wave Sensing in Diverse Scenarios.",
+    "y": 2024,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2024.3522316",
+    "c": 0
+   }
+  ],
+  "0101011": [
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Secure and efficient implementation of facial emotion detection for smart patient monitoring system.",
+    "y": 2023,
+    "v": "Quantitative biology (Beijing, China)",
+    "d": "10.15302/J-QB-022-0312",
+    "c": 0
+   }
+  ],
+  "0101110": [
+   {
+    "t": "MSGM: a multi-scale spatiotemporal graph Mamba for EEG emotion recognition.",
+    "y": 2026,
+    "v": "Frontiers in neuroscience",
+    "d": "10.3389/fnins.2026.1665145",
+    "c": 0
+   },
+   {
+    "t": "IoT-Enabled WBAN and Machine Learning for Speech Emotion Recognition in Patients.",
+    "y": 2023,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s23062948",
+    "c": 0
+   },
+   {
+    "t": "LEMON: A Lightweight Facial Emotion Recognition System for Assistive Robotics Based on Dilated Residual Convolutional Ne",
+    "y": 2022,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s22093366",
+    "c": 0
+   }
+  ],
+  "0110011": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   },
+   {
+    "t": "FedKDC: Consensus-Driven Knowledge Distillation for Personalized Federated Learning in EEG-Based Emotion Recognition.",
+    "y": 2025,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2025.3562090",
+    "c": 0
+   }
+  ],
+  "0110101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0110110": [
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   }
+  ],
+  "0111001": [
+   {
+    "t": "Breaking Resource Barriers in Speech Emotion Recognition via Data Distillation",
+    "y": 2024,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0111100": [
+   {
+    "t": "AMRD: Adaptive Multi-Teacher Relational Distillation for Lightweight Speech Emotion Recognition",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "An Edge-Computing-Based Emotion-Aware Adaptive Lighting System for Intelligent Cockpits.",
+    "y": 2026,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s26113489",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   },
+   {
+    "t": "Optimised knowledge distillation for efficient social media emotion recognition using DistilBERT and ALBERT.",
+    "y": 2025,
+    "v": "Scientific reports",
+    "d": "10.1038/s41598-025-16001-9",
+    "c": 0
+   }
+  ],
+  "1000111": [
+   {
+    "t": "From Neural Networks to Emotional Networks: A Systematic Review of EEG-Based Emotion Recognition in Cognitive Neuroscien",
+    "y": 2025,
+    "v": "Brain Sciences",
+    "d": "10.3390/brainsci15030220",
+    "c": 122
+   },
+   {
+    "t": "When and How to Integrate Multimodal Large Language Models in College Psychotherapy: Perspectives from Multi-stakeholder",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "A User-Centric Context-Aware Framework for Real-Time Optimisation of Multimedia Data Privacy Protection, and Information",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25196105",
+    "c": 0
+   }
+  ],
+  "1001011": [
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   }
+  ],
+  "1001101": [
+   {
+    "t": "Enhancing Emotion Recognition through Federated Learning: A Multimodal Approach with Convolutional Neural Networks",
+    "y": 2024,
+    "v": "Applied Sciences",
+    "d": "10.3390/app14041325",
+    "c": 34
+   },
+   {
+    "t": "FedMultiEmo: Real-Time Emotion Recognition via Multimodal Federated Learning",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1001110": [
+   {
+    "t": "MSGM: a multi-scale spatiotemporal graph Mamba for EEG emotion recognition.",
+    "y": 2026,
+    "v": "Frontiers in neuroscience",
+    "d": "10.3389/fnins.2026.1665145",
+    "c": 0
+   }
+  ],
+  "1010011": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   }
+  ],
+  "1010101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1010110": [
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   }
+  ],
+  "1011001": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1011100": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1101001": [
+   {
+    "t": "Enhancing Emotion Recognition through Federated Learning: A Multimodal Approach with Convolutional Neural Networks",
+    "y": 2024,
+    "v": "Applied Sciences",
+    "d": "10.3390/app14041325",
+    "c": 34
+   },
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "FedMultiEmo: Real-Time Emotion Recognition via Multimodal Federated Learning",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1101010": [
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "MSGM: a multi-scale spatiotemporal graph Mamba for EEG emotion recognition.",
+    "y": 2026,
+    "v": "Frontiers in neuroscience",
+    "d": "10.3389/fnins.2026.1665145",
+    "c": 0
+   }
+  ],
+  "1110001": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1110010": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   },
+   {
+    "t": "Privileged Knowledge Distillation for Dimensional Emotion Recognition in the Wild",
+    "y": 2023,
+    "v": "",
+    "d": "10.1109/cvprw59228.2023.00336",
+    "c": 20
+   },
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "LLM-Enhanced Multi-Teacher Knowledge Distillation for Modality-Incomplete Emotion Recognition in Daily Healthcare.",
+    "y": 2025,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2024.3470338",
+    "c": 0
+   }
+  ],
+  "1110100": [
+   {
+    "t": "Do We Really Need Multimodal Emotion Language Models Larger Than 1B Parameters?",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1111000": [
+   {
+    "t": "Decoupled Multimodal Distilling for Emotion Recognition",
+    "y": 2023,
+    "v": "arXiv (Cornell University)",
+    "d": "10.1109/cvpr52729.2023.00641",
+    "c": 197
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   },
+   {
+    "t": "Multimodal Fusion of Behavioral and Physiological Signals for Enhanced Emotion Recognition via Feature Decoupling and Kn",
+    "y": 2026,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2025.3597398",
+    "c": 0
+   }
+  ],
+  "0001011": [
+   {
+    "t": "Secure and Provenance Enhanced Internet of Health Things Framework: A Blockchain Managed Federated Learning Approach",
+    "y": 2020,
+    "v": "IEEE Access",
+    "d": "10.1109/access.2020.3037474",
+    "c": 292
+   },
+   {
+    "t": "Privacy-preserving edge federated learning for intelligent mobile-health systems",
+    "y": 2024,
+    "v": "Future Generation Computer Systems",
+    "d": "10.1016/j.future.2024.07.035",
+    "c": 68
+   },
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Secure and efficient implementation of facial emotion detection for smart patient monitoring system.",
+    "y": 2023,
+    "v": "Quantitative biology (Beijing, China)",
+    "d": "10.15302/J-QB-022-0312",
+    "c": 0
+   }
+  ],
+  "0001110": [
+   {
+    "t": "Adaptive Extreme Edge Computing for Wearable Devices",
+    "y": 2021,
+    "v": "Frontiers in Neuroscience",
+    "d": "10.3389/fnins.2021.611300",
+    "c": 166
+   },
+   {
+    "t": "MSGM: a multi-scale spatiotemporal graph Mamba for EEG emotion recognition.",
+    "y": 2026,
+    "v": "Frontiers in neuroscience",
+    "d": "10.3389/fnins.2026.1665145",
+    "c": 0
+   },
+   {
+    "t": "IoT-Enabled WBAN and Machine Learning for Speech Emotion Recognition in Patients.",
+    "y": 2023,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s23062948",
+    "c": 0
+   },
+   {
+    "t": "LEMON: A Lightweight Facial Emotion Recognition System for Assistive Robotics Based on Dilated Residual Convolutional Ne",
+    "y": 2022,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s22093366",
+    "c": 0
+   }
+  ],
+  "0010011": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   },
+   {
+    "t": "FedKDC: Consensus-Driven Knowledge Distillation for Personalized Federated Learning in EEG-Based Emotion Recognition.",
+    "y": 2025,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2025.3562090",
+    "c": 0
+   }
+  ],
+  "0010101": [
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0010110": [
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   }
+  ],
+  "0011001": [
+   {
+    "t": "Breaking Resource Barriers in Speech Emotion Recognition via Data Distillation",
+    "y": 2024,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "0011100": [
+   {
+    "t": "AMRD: Adaptive Multi-Teacher Relational Distillation for Lightweight Speech Emotion Recognition",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "An Edge-Computing-Based Emotion-Aware Adaptive Lighting System for Intelligent Cockpits.",
+    "y": 2026,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s26113489",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   },
+   {
+    "t": "Optimised knowledge distillation for efficient social media emotion recognition using DistilBERT and ALBERT.",
+    "y": 2025,
+    "v": "Scientific reports",
+    "d": "10.1038/s41598-025-16001-9",
+    "c": 0
+   }
+  ],
+  "1001001": [
+   {
+    "t": "Enhancing Emotion Recognition through Federated Learning: A Multimodal Approach with Convolutional Neural Networks",
+    "y": 2024,
+    "v": "Applied Sciences",
+    "d": "10.3390/app14041325",
+    "c": 34
+   },
+   {
+    "t": "Catching Lies Without Sending the Video: Privacy-Preserving Multimodal Deception Detection",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "FedMultiEmo: Real-Time Emotion Recognition via Multimodal Federated Learning",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1001010": [
+   {
+    "t": "Uncertainty-Aware Multimodal Emotion Recognition through Dirichlet Parameterization",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "MSGM: a multi-scale spatiotemporal graph Mamba for EEG emotion recognition.",
+    "y": 2026,
+    "v": "Frontiers in neuroscience",
+    "d": "10.3389/fnins.2026.1665145",
+    "c": 0
+   }
+  ],
+  "1010001": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   }
+  ],
+  "1010010": [
+   {
+    "t": "FedCMD: A Federated Cross-modal Knowledge Distillation for Drivers\u2019 Emotion Recognition",
+    "y": 2024,
+    "v": "ACM Transactions on Intelligent Systems and Technology",
+    "d": "10.1145/3650040",
+    "c": 21
+   },
+   {
+    "t": "Privileged Knowledge Distillation for Dimensional Emotion Recognition in the Wild",
+    "y": 2023,
+    "v": "",
+    "d": "10.1109/cvprw59228.2023.00336",
+    "c": 20
+   },
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "LLM-Enhanced Multi-Teacher Knowledge Distillation for Modality-Incomplete Emotion Recognition in Daily Healthcare.",
+    "y": 2025,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2024.3470338",
+    "c": 0
+   }
+  ],
+  "1010100": [
+   {
+    "t": "Do We Really Need Multimodal Emotion Language Models Larger Than 1B Parameters?",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "ATIR: Towards Audio-Text Interleaved Contextual Retrieval",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "LPM 1.0: Video-based Character Performance Model",
+    "y": 2026,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Artificial Behavior Intelligence: Technology, Challenges, and Future Directions",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "",
+    "c": 0
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   },
+   {
+    "t": "Audio Driven Real-Time Facial Animation for Social Telepresence",
+    "y": 2025,
+    "v": "arXiv",
+    "d": "10.1145/3757377.3763854",
+    "c": 0
+   }
+  ],
+  "1011000": [
+   {
+    "t": "Decoupled Multimodal Distilling for Emotion Recognition",
+    "y": 2023,
+    "v": "arXiv (Cornell University)",
+    "d": "10.1109/cvpr52729.2023.00641",
+    "c": 197
+   },
+   {
+    "t": "Multi-Scale Temporal Fusion Network for Real-Time Multimodal Emotion Recognition in IoT Environments.",
+    "y": 2025,
+    "v": "Sensors (Basel, Switzerland)",
+    "d": "10.3390/s25165066",
+    "c": 0
+   },
+   {
+    "t": "Multimodal Fusion of Behavioral and Physiological Signals for Enhanced Emotion Recognition via Feature Decoupling and Kn",
+    "y": 2026,
+    "v": "IEEE journal of biomedical and health informatics",
+    "d": "10.1109/JBHI.2025.3597398",
+    "c": 0
+   }
+  ]
+ }
+}

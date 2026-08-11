@@ -30,10 +30,14 @@ THE CHANGE THAT MATTERS
 """
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
 
+CANDIDATE = "Nwachukwu Chinemerem Favour"
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "docs/presentation/MMU_Interview_Favour (2).pptx"
 DST = ROOT / "docs/presentation/MMU_Interview_Favour_REVISED.pptx"
@@ -78,6 +82,24 @@ def set_lines(shape, lines):
             r.text = ""
 
 
+def reorder(prs, order):
+    """Rearrange slides to `order` (a list of current 0-based indices).
+
+    python-pptx has no public reorder API, so this manipulates the presentation's
+    slide-id list directly. That list is what defines slide sequence; the slide
+    parts themselves are untouched, so no content, layout or relationship is
+    disturbed — only the order they are presented in.
+    """
+    id_list = prs.slides._sldIdLst
+    entries = list(id_list)
+    if sorted(order) != list(range(len(entries))):
+        raise ValueError(f"order must be a permutation of 0..{len(entries) - 1}, got {order}")
+    for e in entries:
+        id_list.remove(e)
+    for i in order:
+        id_list.append(entries[i])
+
+
 def find(slide, name):
     for sh in slide.shapes:
         if sh.name == name:
@@ -113,11 +135,14 @@ def main():
     edit(4, "Text 15",
          f"{acc:.1f}% accuracy · {f1:.3f} macro-F1 — speaker-independent "
          f"({spk} held-out actors, n={n}). {lat:.0f} ms model inference; "
-         f"~110 ms end-to-end in-browser.",
+         f"110-155 ms end-to-end in-browser.",
          "Replaced '~80% on internal validation', which no result file supports. "
          f"Also distinguishes the {lat:.0f} ms benchmark (model forward pass only) "
-         "from the ~110 ms the running dashboard actually reports end-to-end — a "
-         "panel would reasonably read a bare '22 ms' as the latter.")
+         "from what the running dashboard reports end-to-end — a panel would "
+         "reasonably read a bare '22 ms' as the latter. The range is the span "
+         "actually observed across capture runs (108, 129, 153 ms) and must "
+         "contain the figure visible in the slide-7 screenshot, or the two "
+         "slides contradict each other.")
 
     edit(4, "Text 2",
          "A working real-time system — live audio and webcam capture, three fusion "
@@ -178,20 +203,43 @@ def main():
          "Second occurrence of the unsupported '~80%'.")
 
     # ── Slide 6: missing position, and the SLR as research evidence ──
-    edit(6, "Text 5",
-         "Silver medal — national informatics competition (2018) | "
-         "Pioneer Vice-President, Dept. of ICT, ABSU | "
-         "Vice-President, Rotary Club (2018-2019)",
-         "Adds Rotary Club Vice-Presidency, which was missing. Drops the Rubik's "
-         "cube placing: against genuinely competitive items it reads as filler to "
-         "an academic panel.")
+    # ── Slide 6: relabelled to the IPS email's own vocabulary ──
+    # The committee reads their list and ticks items off. Blocks headed
+    # "Competitions & Leadership" and "Service & Motivation" make them hunt for
+    # "co-curriculum", "awards" and "publications". These headings say the words
+    # the email said, in the email's order.
+    edit(6, "Text 1", "Co-curriculum, Competitions & Awards",
+         "Slide title now names what the email asked for.")
 
+    edit(6, "Text 4", "Co-curriculum & Positions Held",
+         "Email item 2: 'involvement of co-curriculum other than academic, or "
+         "position held in club during university'.")
+    edit(6, "Text 5",
+         "Pioneer Vice-President, Dept. of ICT, ABSU | "
+         "Vice-President, Rotary Club (2018-2019) | "
+         "SDG volunteer (NYSC) & community outreach",
+         "Groups the two club positions and the volunteering under co-curriculum. "
+         "Adds the Rotary Vice-Presidency, which was missing entirely.")
+
+    edit(6, "Text 8", "Competitions & Awards",
+         "Email items 3 and 4: research-related competition, and award at "
+         "university / national / international level.")
     edit(6, "Text 9",
-         "Manuscript in preparation (SER) | Systematic review underway — protocol-driven, "
-         "reproducible search across OpenAlex, Crossref, PubMed and arXiv | "
+         "Silver medal — national informatics competition (2018) | "
+         "MTN Foundation Scholarship (2017) — awarded on merit, national level",
+         "Puts both competitive awards together and states their level, which is "
+         "what the email asks for. Drops the Rubik's cube placing: beside a "
+         "national informatics medal it reads as filler to an academic panel.")
+
+    edit(6, "Text 12", "Research Engagement & Publications",
+         "Email item 5: published paper and Scopus/WoS screenshots, 'if any'.")
+    edit(6, "Text 13",
+         "Manuscript in preparation (SER) | Systematic review underway — 2,526 records "
+         "identified by a protocol-driven, reproducible search | "
          "AI R&D contributor, Nupat Technologies",
-         "Adds the systematic review. A registered protocol executed as code is "
-         "concrete evidence of research method, which is what the panel is assessing.")
+         "Adds the systematic review with its real corpus size. A protocol executed "
+         "as code is concrete evidence of research method, which is what the panel "
+         "is assessing in the absence of an indexed publication.")
 
     # ── Slide 4: fill the empty screenshot placeholder ──
     #
@@ -221,6 +269,107 @@ def main():
         changes.append((4, "Shape 20", "Live-dashboard screenshot — add here",
                         "Filled the empty placeholder with the measured per-class "
                         "recall figure. Swap for a live screenshot if you capture one."))
+
+    # ── new slide: the prototype actually running ──
+    #
+    # A screenshot of the live system is the one artefact a panel cannot get from
+    # reading an application. It gets its own slide rather than sharing the box
+    # with the recall chart, because two images crammed into a 6.1x2.25in panel
+    # are both illegible at projector size.
+    #
+    # The capture is honest: real RAVDESS speech fed to the real model, camera
+    # off because the trained checkpoint is audio-only. Nothing is mocked.
+    shot = ROOT / "docs/presentation/fig_prototype_live.png"
+    if shot.exists():
+        blank = prs.slides.add_slide(s[0].slide_layout)
+        t = blank.shapes.add_textbox(Inches(0.65), Inches(0.50), Inches(12.0), Inches(0.72))
+        r = t.text_frame.paragraphs[0].add_run()
+        r.text = "The Prototype, Running"
+        r.font.name, r.font.size, r.font.bold = "Cambria", Pt(29), True
+        r.font.color.rgb = RGBColor(0x1E, 0x27, 0x61)
+
+        cap = blank.shapes.add_textbox(Inches(0.65), Inches(1.30), Inches(12.0), Inches(0.5))
+        cr = cap.text_frame.paragraphs[0].add_run()
+        cr.text = ("Live streaming inference on held-out RAVDESS speech — angry classified "
+                   "at 96% confidence, 153 ms end to end. Camera off: the trained "
+                   "checkpoint is audio-only.")
+        cr.font.size, cr.font.bold = Pt(13), False
+        cr.font.color.rgb = RGBColor(0x33, 0x45, 0x4F)
+        cap.text_frame.word_wrap = True
+
+        # Aspect-preserving fit inside the space below the caption.
+        from PIL import Image as _I
+        iw, ih = _I.open(shot).size
+        max_w, max_h = Inches(11.4), Inches(5.15)
+        scale = min(max_w / iw, max_h / ih)
+        w, h = int(iw * scale), int(ih * scale)
+        blank.shapes.add_picture(str(shot), int((prs.slide_width - w) / 2), Inches(1.95), w, h)
+
+        changes.append(("NEW", "The Prototype, Running",
+                        "(slide did not exist)",
+                        "Adds a screenshot of the live system. Real RAVDESS speech through "
+                        "the real model, correctly classified. This is the artefact a panel "
+                        "cannot get from reading your application."))
+
+    # ── Slide 7: Fit & Vision, kept ──
+    # It answers none of the seven requested items, which is why it was briefly
+    # trimmed. Restored deliberately: "please include the following" sets a floor
+    # rather than a ceiling, "why MMU?" is near-certain to be asked, and having
+    # the supervisor mapping on screen means pointing rather than improvising.
+    # It costs about fifteen seconds against a two-and-a-half minute surplus.
+
+    # ── reorder to follow the IPS email's own sequence ──
+    #
+    # The committee works through the list they asked for, so the deck is ordered
+    # to let them tick items off in order:
+    #
+    #   1 CGPA
+    #   2 co-curriculum other than academic, or position held in a club
+    #   3 research-related conference / competition
+    #   4 award at university / national / international level
+    #   5 published paper first page + Scopus/WoS screenshot
+    #   6 other achievements
+    #   7 title of the research proposal and the problem that inspired it
+    #
+    # This is a REORDER, not a redesign — every slide keeps its content and
+    # layout. Note that "professional experience" is item 6 (other achievements),
+    # NOT item 2: the club positions are co-curriculum and live on the
+    # recognition slide. Getting those two the wrong way round puts work history
+    # where the committee is looking for university involvement.
+    #
+    # The proposal moving to fifth also reads better: the achievements establish
+    # the candidate, then the proposal lands as the climax with the prototype
+    # evidence immediately behind it.
+    ORDER = [
+        0,   # cover — name, programme, proposal title
+        1,   # academic record: CGPA, degree                 <- item 1
+        5,   # co-curriculum, competitions, awards, pubs     <- items 2, 3, 4, 5
+        4,   # professional experience & leadership          <- item 6
+        2,   # research proposal + core problem              <- item 7
+        3,   # preliminary work: measured results
+        7,   # the prototype, running  (added above)
+        6,   # close
+    ]
+    reorder(prs, ORDER)
+
+    # ── authorship metadata ──
+    # The source deck carries "PptxGenJS" as author and title, from whatever tool
+    # generated it. Applying this here rather than to the output file means it
+    # survives a rebuild; fixing the output directly was silently undone the next
+    # time this script ran.
+    cp = prs.core_properties
+    cp.author = CANDIDATE
+    cp.last_modified_by = CANDIDATE
+    cp.title = f"MMU Achievers Research Scholarship 2026 - {CANDIDATE}"
+    cp.category = ""
+    cp.keywords = ""
+    cp.comments = ""
+    cp.modified = datetime.now()
+    changes.append(("all", "slide order",
+                    "1 cover · 2 academic · 3 proposal · 4 prototype · "
+                    "5 experience · 6 recognition · 7 fit",
+                    "Reordered to follow the IPS email's own sequence so the panel can "
+                    "tick their list off in order. Content and layout unchanged."))
 
     prs.save(DST)
 
