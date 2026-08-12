@@ -96,6 +96,16 @@ def show_record(rec, n, total, done):
         print(wrap(f"flags: {rec['flags']}", "  "))
     if rec.get("pdf_url"):
         print(wrap(f"pdf: {rec['pdf_url'][:88]}", "  "))
+    elif rec.get("_oa_url"):
+        # Resolved by slr/access.py rather than supplied by the search. The
+        # version is shown because an accepted manuscript is not the version of
+        # record — page numbers and wording can differ, and a quotation must be
+        # attributed to the version it actually came from.
+        v = rec.get("_oa_version") or "version unstated"
+        print(wrap(f"pdf: {rec['_oa_url'][:88]}", "  "))
+        print(wrap(f"     ^ found open access ({v})", "  "))
+    elif rec.get("_oa_checked"):
+        print(wrap("pdf: none found — checked Unpaywall and arXiv (threat T7)", "  "))
     if rec.get("doi"):
         print(wrap(f"doi: {rec['doi']}", "  "))
     print(rule("┈"))
@@ -115,7 +125,24 @@ def load_screening():
     if not SCREENING.exists():
         sys.exit(f"missing {SCREENING} — run `python3 -m slr.pipeline --run` first")
     with SCREENING.open(encoding="utf-8") as f:
-        return [r for r in csv.DictReader(f) if r["decision"] == "review"]
+        rows = [r for r in csv.DictReader(f) if r["decision"] == "review"]
+
+    # Layer on anything slr/access.py resolved. Kept as a SEPARATE file rather
+    # than written back into screening.csv, because the pipeline regenerates
+    # screening.csv wholesale and would erase it. Same reasoning as decisions.csv.
+    access = OUT / "access.csv"
+    if access.exists():
+        with access.open(encoding="utf-8") as f:
+            found = {r["id"]: r for r in csv.DictReader(f)}
+        for r in rows:
+            a = found.get(r["id"])
+            if not a:
+                continue
+            r["_oa_checked"] = "1"
+            if a.get("resolved") == "yes":
+                r["_oa_url"] = a.get("url") or a.get("landing_page") or ""
+                r["_oa_version"] = a.get("version") or ""
+    return rows
 
 
 def load_decisions():

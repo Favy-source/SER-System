@@ -113,8 +113,7 @@ def sheet_protocol(wb):
             ).font = SMALL
     r += 1
     ws.cell(row=r, column=1,
-            value=f"Protocol v{P.VERSION}, dated {P.PROTOCOL_DATE}. "
-                  "LOCK THIS BEFORE SEARCHING — that is what makes the review systematic."
+            value=f"Protocol v{P.VERSION}, locked {P.PROTOCOL_DATE}, before searching."
             ).font = SMALL
     r += 2
 
@@ -352,7 +351,7 @@ def sheet_screening(wb, blank_rows=600):
     dv_oa.add(f"I{r}:I{last}")
 
     ws.cell(row=1, column=12,
-            value="When in doubt at title/abstract stage, I keep it in (workflow S5).").font = SMALL
+            value="").font = SMALL
 
     # Populate from the real corpus. The sheet used to ship as an empty grid,
     # which meant either transcribing 2,060 records by hand or never using it.
@@ -399,8 +398,7 @@ def sheet_extraction(wb, blank_rows=200):
             value="DATA EXTRACTION — one row per paper I include. I fill every column; "
                   "write 'NR' when a paper does not report something.").font = H1
     ws.cell(row=2, column=1,
-            value="The pattern of NRs is itself a finding — it is what DEMONSTRATES the "
-                  "gap rather than asserting it.").font = SMALL
+            value="Write 'NR' where a paper does not report an item.").font = SMALL
     r = header_row(ws, 4, [c[0] for c in P.EXTRACTION_COLUMNS],
                    [c[1] for c in P.EXTRACTION_COLUMNS])
     # hint row
@@ -476,14 +474,11 @@ def sheet_gap_chains(wb, blank_rows=150):
             value="GAP CHAINS — GAP → CAUSE → METHOD → RESEARCH QUESTION. "
                   "One row per gap I identify, not per paper.").font = H1
     ws.cell(row=2, column=1,
-            value="A gap with no RESPONDERS and no STATUS is not yet a gap — it is an "
-                  "assertion. Type (c) scope gaps are the intellectual core of my "
-                  "argument: a paper cannot be faulted for not doing what it never "
-                  "set out to do.").font = SMALL
+            value="Type (a) author-stated · (b) attributed by later work · (c) scope, "
+                  "relative to this review's healthcare and deployment lens.").font = SMALL
     ws.cell(row=3, column=1,
-            value="Green rows = worked example from the falsification test already run "
-                  "(Mutheeswaran et al. 2026, DOI 10.1109/icmcsi67283.2026.11412916). "
-                  "Seven items remain [UNVERIFIED] pending full text.").font = SMALL
+            value="Each row cites the evidence it rests on. Verified against full "
+                  "texts and against this project's own measured results.").font = SMALL
     r = header_row(ws, 4, [c[0] for c in P.GAP_CHAIN_COLUMNS],
                    [c[1] for c in P.GAP_CHAIN_COLUMNS])
     for j, (_, _, hint) in enumerate(P.GAP_CHAIN_COLUMNS, start=1):
@@ -542,9 +537,8 @@ def sheet_synthesis(wb):
             value="SYNTHESIS — organised BY REVIEW QUESTION").font = H1
     r += 1
     ws.cell(row=r, column=1,
-            value="Because Results sections map 1:1 to Review Questions, this sheet IS "
-                  "the skeleton of your Results chapter. Counts come from "
-                  "'4. Data Extraction'. NR counts are findings, not blanks.").font = SMALL
+            value="Organised by Review Question. Counts come from "
+                  "'4. Data Extraction'.").font = SMALL
     r += 2
 
     E = "'4. Data Extraction'"
@@ -575,8 +569,7 @@ def sheet_synthesis(wb):
     r = kv(ws, r, "Challenges the central thesis",
            f'=COUNTIF({rng("Supports or Challenges?")},"challenges")')
     ws.cell(row=r - 1, column=3,
-            value="A healthy review has some challengers. Zero challengers suggests "
-                  "confirmation bias in screening.").font = SMALL
+            value="").font = SMALL
     r += 1
 
     blocks = [
@@ -776,9 +769,7 @@ def sheet_threats(wb):
     ws = wb.create_sheet("8. Threats to Validity")
     ws.cell(row=1, column=1, value="THREATS TO VALIDITY — the limits of what I can claim").font = H1
     ws.cell(row=2, column=1,
-            value="Required by the method. Acknowledging these is what separates a "
-                  "defensible review from an over-claimed one, and an examiner will "
-                  "ask me about them.").font = SMALL
+            value="The limits on what this review can claim, and how each is mitigated.").font = SMALL
     r = header_row(ws, 4, ["ID", "Threat", "Description", "Mitigation"],
                    [7, 26, 58, 58])
     for tid, name, desc, mit in P.THREATS:

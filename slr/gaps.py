@@ -202,7 +202,9 @@ GAP_CHAINS = [
         "rq2": "RQ1",
         "evidence": "Full text Table V and the paragraph following it.",
         "caveat": (
-            "State this limitation about your own work before stating it about theirs."),
+            "This thesis will not deliver clinical validation either, within a "
+            "Master's timeframe and without ethics approval. The limitation is "
+            "stated about this work before it is stated about theirs."),
     },
     {
         "id": "G6",

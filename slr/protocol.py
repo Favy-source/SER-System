@@ -593,10 +593,19 @@ THREATS = [
      "contribution is reported separately."),
     ("T7", "Full-text access",
      "Without subscriptions, some full texts are unobtainable, forcing EC5 exclusions "
-     "that are access-driven rather than content-driven.",
-     "Open-access status is recorded per record and exports are sorted by "
-     "retrievability. Author contact is used for key papers. EC5-by-access exclusions "
-     "are counted and reported separately from EC5-by-content."),
+     "that are access-driven rather than content-driven. MEASURED across the two "
+     "working tiers on 2026-08-12: of 1,224 records, 570 arrived with a usable link "
+     "and a further 358 were recovered as legally-available open-access copies, "
+     "leaving 296 (24%) unreadable. Coverage is 79% for T1 and 75% for T2. The "
+     "recovered copies are not all the version of record: 318 published versions, "
+     "19 accepted manuscripts, 21 preprints.",
+     "slr/access.py queries Unpaywall for every record lacking a link, then falls back "
+     "to an arXiv preprint matched on exact normalised title. Results and the VERSION "
+     "of each copy are recorded in out/access.csv, because an accepted manuscript is "
+     "not the version of record and pagination can differ. Nothing circumvents a "
+     "paywall. EC5-by-access exclusions are counted separately from EC5-by-content, so "
+     "the unreadable 24% stays visible as an access limit instead of disappearing "
+     "inside a relevance judgement. Author contact is used for key papers."),
     ("T8", "Forward-citation coverage varies",
      "Citation graphs differ between providers; OpenAlex alone will miss some responders, "
      "which matters because step 3 of the gap method depends on them.",
@@ -649,7 +658,7 @@ THREATS = [
 
 TRAPS = [
     ("Reading before the protocol is locked",
-     "Biases the corpus toward what you already believe.",
+     "Biases the corpus toward what the reviewer already believes.",
      "This Protocol sheet is version-stamped and dated. Lock it before searching."),
     ("Paper-by-paper summary instead of synthesis",
      "'Paper A did X, Paper B did Y' is summarising, not synthesising.",
@@ -672,7 +681,7 @@ TRAPS = [
      "Separate concerns: the Protocol sheet holds concepts, the Synthesis sheet holds "
      "evidence, one block per Review Question."),
     ("Scope too broad or too narrow",
-     "Too broad and you drown; too narrow and the corpus is thin.",
+     "Too broad and the corpus is unmanageable; too narrow and it is thin.",
      "Explicit SCOPE IN / SCOPE OUT lists on the Protocol sheet, fixed before searching."),
 ]
 

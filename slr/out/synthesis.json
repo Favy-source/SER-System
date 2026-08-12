@@ -1,0 +1,56 @@
+{
+  "n": 2029,
+  "with_abstract": 1802,
+  "req5": {
+    "speaker_independent": 176,
+    "cross_corpus": 147,
+    "speaker_dependent": 52,
+    "split_kind_unstated": 55,
+    "uar_or_macro_f1": 103,
+    "silent_on_evaluation": 1689
+  },
+  "req4_datasets": {
+    "IEMOCAP": 199,
+    "DEAP": 106,
+    "SEED": 95,
+    "CMU-MOSEI": 85,
+    "EmoReact/wild": 75,
+    "MELD": 73,
+    "RAVDESS": 68,
+    "CMU-MOSI": 60,
+    "EMO-DB": 58,
+    "FER2013": 34,
+    "SAVEE": 31,
+    "CREMA-D": 29,
+    "eNTERFACE": 19,
+    "MSP-IMPROV": 18,
+    "AFEW": 18,
+    "AffectNet": 15,
+    "CK+": 14,
+    "TESS": 13,
+    "MSP-Podcast": 12,
+    "WESAD": 11
+  },
+  "req3_fusion": {
+    "feature-level / early": 80,
+    "decision-level / late": 66,
+    "attention / cross-modal": 70,
+    "tensor / bilinear": 7,
+    "hybrid": 8,
+    "graph": 30
+  },
+  "req6": {
+    "edge / on-device": 115,
+    "compression": 76,
+    "latency / real-time": 253,
+    "robustness": 622,
+    "missing modality": 78,
+    "privacy / federated": 110,
+    "healthcare / clinical": 425
+  },
+  "intersection": {
+    "edge_and_health": 28,
+    "edge_health_privacy": 6
+  },
+  "caveat": "Signals from titles and abstracts of the retrieved corpus. Not findings; abstracts under-report method. The ReQ5 result must come from full-text extraction on included papers."
+}
