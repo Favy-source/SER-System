@@ -10,7 +10,7 @@ THE HARD RULE
         review         everything else, carrying a SUGGESTION and the flags
                        behind it
 
-    Screening is the reviewer's intellectual contribution and an examiner will
+    Screening is my intellectual contribution and an examiner will
     ask who made each call. A tool that auto-included would make the review
     indefensible, and would also be the single easiest thing for a viva panel to
     attack. So the machine removes only what is mechanically impossible to keep,
@@ -141,7 +141,7 @@ def screen_one(rec: Record, strings: List[dict],
     if not rec.matched_strings:
         if found_by_citation:
             # Legitimately retrieved by a different method (step 3), so failing
-            # the string is not disqualifying — but the reviewer should know.
+            # the string is not disqualifying — but I should know.
             flags.append("no_string_match_found_via_citation")
         else:
             return Screened(rec, "auto-exclude", "SEARCH",

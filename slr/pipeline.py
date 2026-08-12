@@ -17,7 +17,7 @@ OUTPUTS (slr/out/)
 WHAT THIS DOES AND DOES NOT DECIDE
     It identifies, deduplicates, and removes only what mechanically cannot be
     included. Every surviving record lands in screening.csv with decision
-    "review" and a blank `my_decision` column for the reviewer to fill in.
+    "review" and a blank `my_decision` column for me to fill in.
     The include/exclude judgement stays human — see slr/screen.py.
 
 REPRODUCIBILITY — AND ITS LIMIT
@@ -61,6 +61,18 @@ SOURCES = {
     "crossref": ("D2", crossref),
     "pubmed":   ("D3", pubmed_src),
     "arxiv":    ("D4", arxiv),
+}
+
+# How each source expresses the publication window. Recorded per row in the
+# search log because these are NOT equivalent: arXiv filters on submission date,
+# so a preprint submitted in 2014 and revised in 2016 is excluded there while its
+# published version is included everywhere else. That asymmetry is a reportable
+# methodological detail, not a formatting difference.
+FILTER_EXPR = {
+    "openalex": "from_publication_date:{a}-01-01,to_publication_date:{b}-12-31",
+    "crossref": "from-pub-date:{a}-01-01,until-pub-date:{b}-12-31",
+    "pubmed":   '("{a}"[dp] : "{b}"[dp])',
+    "arxiv":    "submittedDate:[{a}01010000 TO {b}12312359]  (SUBMISSION date)",
 }
 
 
@@ -109,7 +121,13 @@ def run_search(sources: List[str], strings: List[dict], *,
                 "purpose": s["purpose"],
                 "protocol_string": s["string"],
                 "query_sent": q,
-                "filters": f"{protocol.YEAR_MIN}-{protocol.YEAR_MAX}",
+                # The actual expression, not the window. Every row saying
+                # "2015-2026" recorded nothing; the expressions differ per source
+                # and arXiv's is materially different — it filters on SUBMISSION
+                # date, so a preprint submitted before the window but revised
+                # inside it is treated differently there than elsewhere.
+                "filters": FILTER_EXPR[name].format(a=protocol.YEAR_MIN,
+                                                    b=protocol.YEAR_MAX),
                 "hits_reported": "", "retrieved": 0, "matched_predicate": 0,
                 "notes": "",
             }
@@ -210,7 +228,7 @@ def export(screened, search_log, prisma, snowball_report=None):
             "title", "authors", "year", "venue", "venue_type", "doi",
             "oa_status", "pdf_url", "cited_by", "sources", "merged_from",
             "matched_strings", "found_via", "abstract",
-            # left blank on purpose — these are the reviewer's columns
+            # left blank on purpose — these are my columns
             "my_TA_decision", "my_TA_reason", "my_fulltext_decision", "my_EC_code",
             "notes"]
     with (OUT / "screening.csv").open("w", newline="", encoding="utf-8") as f:
@@ -281,7 +299,7 @@ def build_prisma(n_raw_db, n_raw_other, n_dupes, screened) -> dict:
                      "(IC2 year, IC5 language, EC3 non-human/synthesis, EC5 "
                      "non-archival, and the protocol Boolean predicate). No "
                      "record is auto-included; IC3, IC4, EC1 and EC2 require "
-                     "the reviewer's judgement."),
+                     "my judgement."),
         },
         "reviewable_corpus": {
             "by_search_string": dict(sorted(by_string.items())),

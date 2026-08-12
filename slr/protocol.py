@@ -423,7 +423,7 @@ GAP_STATUS = {
 }
 
 CAUSE_TO_MECHANISM_RULE = (
-    "Match the CAUSE of the gap to the MECHANISM of the candidate method. If a gap "
+    "Match the CAUSE of the gap to the MECHANISM of my method. If a gap "
     "exists because a fusion rule cannot model cross-modal interaction, the best-suited "
     "fix is a method whose mechanism IS cross-modal interaction. If a gap exists because "
     "a method assumes modalities co-occur, the best-suited fix reconstructs missing "
@@ -441,7 +441,7 @@ GAP_METHOD_STEPS = [
     "scope = never attempted but relevant to this review.",
     "5. Which Research Question does it touch? Map to exactly one primary (secondary "
     "allowed). No mapping means the RQ set is incomplete or the gap is out of scope.",
-    "6. Cause-to-mechanism check: does the candidate method's mechanism directly attack "
+    "6. Cause-to-mechanism check: does my method's mechanism directly attack "
     "the gap's cause? If not, keep looking.",
 ]
 
@@ -575,11 +575,14 @@ THREATS = [
      "fusion results are under-published.",
      "Preprints (D4) are searched, which surfaces some unpublished negative results."),
     ("T4", "Single-reviewer screening",
-     "One reviewer performs screening and extraction, so no inter-rater agreement "
-     "(Cohen's kappa) can be reported and selection bias cannot be quantified.",
+     "I perform screening and extraction alone, so I cannot report inter-rater agreement "
+     "(Cohen's kappa) and cannot quantify selection bias.",
      "Mechanical criteria are applied by code with a recorded reason per decision, so "
      "the deterministic part of screening is auditable and repeatable. Judgement calls "
-     "remain single-reviewer and are declared as such."),
+     "remain mine alone and I declare them as such. One place my judgement could drift "
+     "is work by my supervisors, so I checked explicitly on 2026-08-11: none of their "
+     "papers satisfies any of my search strings and none entered the corpus. I cite them "
+     "in Background and Discussion, never as included studies."),
     ("T5", "Incomplete abstract coverage",
      "OpenAlex lacks abstracts for some older and some Elsevier records.",
      "Records without abstracts are SURFACED for title-only screening, never silently "
@@ -620,6 +623,22 @@ THREATS = [
      "flagged `language_unreported` and left to manual screening. Crossref records that "
      "merge with an OpenAlex or PubMed record inherit a language. The count of records "
      "screened without language metadata is reported in prisma.json."),
+
+    ("T11", "My search scope bounds what I can find at all",
+     "My nine search strings all target emotion recognition. Adjacent literatures bearing on "
+     "the same problem - technology acceptance, health informatics, human factors, "
+     "implementation science - are structurally invisible to this review, so any claim about "
+     "how they relate to multimodal emotion recognition sits outside what my evidence "
+     "supports. Clearest instance: reading my supervisors' work surfaced a plausible "
+     "disconnect between technical MER research and research on why health technology fails "
+     "to be adopted. I cannot substantiate that from this corpus, because I searched only "
+     "one side of it.",
+     "I record it as a candidate gap, not a finding. Substantiating it would need a protocol "
+     "amendment adding an acceptance/adoption string and a further search cycle. Until then I "
+     "argue it in the Discussion with citations rather than presenting it as a result of this "
+     "review. Stating an unsearched claim as a finding is the 'asserting the gap rather than "
+     "demonstrating it' trap my own protocol names."),
+
 ]
 
 

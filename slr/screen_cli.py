@@ -13,7 +13,7 @@ WHAT THIS IS AND IS NOT
     It is not a classifier. It never suggests include/exclude and never fills a
     decision in for you. slr/screen.py already removed everything mechanically
     impossible to include; what remains needs judgement, and that judgement is
-    the reviewer's contribution to the review. An examiner will ask who made
+    my contribution to the review. An examiner will ask who made
     these calls, and "a script" is not an answer.
 
 RESUMABILITY

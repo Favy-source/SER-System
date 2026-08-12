@@ -288,28 +288,90 @@ def main():
         r.font.name, r.font.size, r.font.bold = "Cambria", Pt(29), True
         r.font.color.rgb = RGBColor(0x1E, 0x27, 0x61)
 
-        cap = blank.shapes.add_textbox(Inches(0.65), Inches(1.30), Inches(12.0), Inches(0.5))
+        cap = blank.shapes.add_textbox(Inches(0.65), Inches(1.26), Inches(12.0), Inches(0.5))
         cr = cap.text_frame.paragraphs[0].add_run()
-        cr.text = ("Live streaming inference on held-out RAVDESS speech — angry classified "
-                   "at 96% confidence, 153 ms end to end. Camera off: the trained "
-                   "checkpoint is audio-only.")
+        cr.text = ("Both streams, running. Audio inference on held-out RAVDESS speech; "
+                   "facial landmarks tracked live at 8 fps on GPU.")
         cr.font.size, cr.font.bold = Pt(13), False
         cr.font.color.rgb = RGBColor(0x33, 0x45, 0x4F)
         cap.text_frame.word_wrap = True
 
-        # Aspect-preserving fit inside the space below the caption.
+        # Two panels at MATCHED HEIGHT so their tops and bottoms align; the widths
+        # differ because the crops differ in aspect. Equal widths would have left
+        # one panel floating above the other's baseline.
         from PIL import Image as _I
-        iw, ih = _I.open(shot).size
-        max_w, max_h = Inches(11.4), Inches(5.15)
-        scale = min(max_w / iw, max_h / ih)
-        w, h = int(iw * scale), int(ih * scale)
-        blank.shapes.add_picture(str(shot), int((prs.slide_width - w) / 2), Inches(1.95), w, h)
+        vis = ROOT / "docs/presentation/fig_visual_pipeline.png"
+        panels = [(shot, "Trained audio model: angry at 96% confidence, 153 ms end to end.")]
+        if vis.exists():
+            panels.append((vis, "Visual pipeline: 468 landmarks, face tracked, 8 fps, GPU. "
+                                "Captured but not yet consumed — the trained checkpoint "
+                                "is audio-only."))
+
+        # Height is derived from the WIDTH budget, not chosen. Side by side, the
+        # two aspects sum to ~4.55:1, so the widest the pair can be is what fits
+        # across the slide — picking a height first left either overflow or a
+        # third of the slide empty.
+        gap = Inches(0.35)
+        avail = prs.slide_width - Inches(1.0) - gap
+        aspects = [(lambda s: s[0] / s[1])(_I.open(p).size) for p, _ in panels]
+        H = int(avail / sum(aspects))
+        sizes = [(int(H * a), H) for a in aspects]
+        total = sum(w for w, _ in sizes) + gap * (len(sizes) - 1)
+        x = int((prs.slide_width - total) / 2)
+        top = Inches(1.92)
+        for (path, sub), (w, h) in zip(panels, sizes):
+            blank.shapes.add_picture(str(path), x, top, w, h)
+            tb = blank.shapes.add_textbox(x, top + h + Inches(0.12), w, Inches(0.9))
+            tb.text_frame.word_wrap = True
+            sr = tb.text_frame.paragraphs[0].add_run()
+            sr.text = sub
+            sr.font.size = Pt(10.5)
+            sr.font.color.rgb = RGBColor(0x5A, 0x6B, 0x76)
+            x += w + gap
+
+        # The line that makes the slide an argument rather than two screenshots.
+        foot = blank.shapes.add_textbox(Inches(0.65), Inches(6.15),
+                                        Inches(12.0), Inches(0.7))
+        foot.text_frame.word_wrap = True
+        fr = foot.text_frame.paragraphs[0].add_run()
+        fr.text = ("Two streams captured, one model trained. Joining them — and proving "
+                   "the join recovers the valence the audio model cannot read — is the "
+                   "research I am proposing.")
+        fr.font.size, fr.font.bold = Pt(13), True
+        fr.font.color.rgb = RGBColor(0x1E, 0x27, 0x61)
 
         changes.append(("NEW", "The Prototype, Running",
                         "(slide did not exist)",
                         "Adds a screenshot of the live system. Real RAVDESS speech through "
                         "the real model, correctly classified. This is the artefact a panel "
                         "cannot get from reading your application."))
+
+    # ── Slide 7: correct the supervisor claim ──
+    #
+    # The original said Kanesaraj works on "quantized, edge-deployed models".
+    # Across his 71 indexed works there are ZERO papers on quantisation, pruning,
+    # distillation or compression. Said to his face on a panel, that reads as
+    # not having read him.
+    #
+    # His real direction is a better fit anyway: real-time deep learning on
+    # Raspberry Pi for biomedical signals (digital stethoscope 2026, energy-
+    # efficient COPD detection 2025), and his most-cited paper — 167 citations —
+    # is on psychosocial barriers to healthcare technology ADOPTION, which is
+    # this thesis's deployment gap seen from the human side.
+    #
+    # Wan-Noorshahida is likewise not primarily a face researcher: her record is
+    # hand gesture recognition (96 cites), gait recognition, crowd density. That
+    # maps onto the BEHAVIOURAL third modality, not the facial stream.
+    edit(7, "Text 3",
+         "A precise fit: Assoc. Prof. Kanesaraj runs real-time deep learning on "
+         "Raspberry Pi for biomedical signals, and publishes on the barriers to "
+         "healthcare technology adoption — my deployment gap from the human side. "
+         "Assoc. Prof. Wan-Noorshahida works on gait and gesture recognition: the "
+         "behavioural modality in my proposal.",
+         "CORRECTION. The original credited Kanesaraj with research on 'quantized, "
+         "edge-deployed models'; he has no such papers across 71 indexed works. "
+         "Replaced with what both supervisors actually publish, verified against "
+         "OpenAlex. The true fit is stronger than the claimed one.")
 
     # ── Slide 7: Fit & Vision, kept ──
     # It answers none of the seven requested items, which is why it was briefly

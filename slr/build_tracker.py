@@ -30,18 +30,23 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from slr import gaps as G
 from slr import protocol as P
 
 # ── palette ────────────────────────────────────────────────
-NAVY   = "1F3864"
-BLUE   = "2E5A88"
-LIGHT  = "D9E2F3"
-BAND   = "F2F5FA"
-AMBER  = "FFF2CC"
-GREEN  = "E2EFDA"
-RED    = "FCE4E4"
+# Black, white and grey only. A tracker is a working instrument, not a poster:
+# colour here should mean something, and when six fills all mean "a section"
+# they mean nothing. Emphasis is carried by weight and by one grey step, so the
+# sheet also survives being printed or photocopied.
+NAVY   = "1A1A1A"   # headers and section bars
+BLUE   = "404040"   # secondary headers
+LIGHT  = "D9D9D9"   # emphasis fill
+BAND   = "F2F2F2"   # zebra banding
+AMBER  = "E0E0E0"   # was amber — the inclusion test
+GREEN  = "EDEDED"   # was green — worked examples
+RED    = "D0D0D0"   # was red  — the threats I cannot mitigate
 WHITE  = "FFFFFF"
-GREY   = "808080"
+GREY   = "6E6E6E"
 
 H1 = Font(bold=True, size=14, color=NAVY)
 H2 = Font(bold=True, size=11, color=WHITE)
@@ -257,23 +262,51 @@ def sheet_search_log(wb):
     ws = wb.create_sheet("2. Search Log")
     ws.cell(row=1, column=1,
             value="SEARCH LOG — one row per search string per source. "
-                  "Fill Date, Hits and Exported as you run each.").font = H1
+                  "I record the date, hits and export count as I run each search.").font = H1
+    # The window is a protocol constant, so it is stated ONCE here. A column
+    # repeating "2015-2026" on all 36 rows carried no information, so it is gone;
+    # what varies and therefore earns a column is the DATE I ran each search.
+    ws.cell(row=2, column=1,
+            value=f"Publication window applied to every search below: "
+                  f"{P.YEAR_MIN}-{P.YEAR_MAX}, English."
+                  f"   Note: arXiv filters on submission date, the others on "
+                  f"publication date."
+            ).font = Font(bold=True, size=10, color=NAVY)
     r = header_row(ws, 3,
-                   ["Date", "Source", "String ID", "Serves ReQ", "Search String",
-                    "Filters Applied", "Hits", "Exported", "Notes"],
-                   [12, 16, 10, 14, 74, 22, 9, 10, 34])
-    for s in P.SEARCH_STRINGS:
+                   ["Date Run", "Source", "String ID", "Serves ReQ", "Search String",
+                    "Hits", "Satisfying string", "Notes"],
+                   [13, 17, 10, 15, 78, 10, 16, 34])
+
+    # Populated from the real run when slr/out/search_log.csv exists, so the sheet
+    # reports what I actually did rather than an empty template I would have to
+    # transcribe by hand.
+    import csv as _csv
+    log_path = Path(__file__).resolve().parent / "out" / "search_log.csv"
+    actual = {}
+    if log_path.exists():
+        with log_path.open(encoding="utf-8") as f:
+            for row in _csv.DictReader(f):
+                actual[(row["string_id"], row["database"])] = row
+
+    DB_TO_KEY = {"openalex": "D1", "crossref": "D2", "pubmed": "D3", "arxiv": "D4"}
+    KEY_TO_DB = {v: k for k, v in DB_TO_KEY.items()}
+
+    for s_ in P.SEARCH_STRINGS:
         for db_key, (db_name, _) in P.DATABASES.items():
             if db_key in ("D7", "D8"):        # snowballing / manual, logged separately
                 continue
-            ws.cell(row=r, column=1, value="").alignment = TOP
+            rec = actual.get((s_["id"], KEY_TO_DB.get(db_key, "")))
+            ws.cell(row=r, column=1, value=(rec or {}).get("date", "")).alignment = TOP
             ws.cell(row=r, column=2, value=f"{db_key} {db_name}").alignment = TOP
-            ws.cell(row=r, column=3, value=s["id"]).alignment = CTR
-            ws.cell(row=r, column=4, value=", ".join(s["serves"])).alignment = TOP
-            c = ws.cell(row=r, column=5, value=s["string"]); c.font = MONO; c.alignment = TOP
-            ws.cell(row=r, column=6, value=f"{P.YEAR_MIN}-{P.YEAR_MAX}, English").alignment = TOP
-            ws.cell(row=r, column=9, value=s["purpose"]).alignment = TOP
-            for j in range(1, 10):
+            ws.cell(row=r, column=3, value=s_["id"]).alignment = CTR
+            ws.cell(row=r, column=4, value=", ".join(s_["serves"])).alignment = TOP
+            c = ws.cell(row=r, column=5, value=s_["string"]); c.font = MONO; c.alignment = TOP
+            if rec:
+                ws.cell(row=r, column=6, value=int(rec["retrieved"])).alignment = CTR
+                ws.cell(row=r, column=7, value=int(rec["matched_predicate"])).alignment = CTR
+            ws.cell(row=r, column=8,
+                    value=(rec or {}).get("notes") or s_["purpose"]).alignment = TOP
+            for j in range(1, 9):
                 ws.cell(row=r, column=j).border = BOX
                 if r % 2 == 0:
                     ws.cell(row=r, column=j).fill = PatternFill("solid", fgColor=BAND)
@@ -296,8 +329,8 @@ def sheet_search_log(wb):
 def sheet_screening(wb, blank_rows=600):
     ws = wb.create_sheet("3. Screening")
     ws.cell(row=1, column=1,
-            value="SCREENING — every retrieved record. Populated by slr/pipeline.py; "
-                  "T/A and Full-Text decisions are YOURS.").font = H1
+            value="SCREENING — every retrieved record I retrieved. Populated by slr/pipeline.py. "
+                  "The title/abstract and full-text decisions are mine alone.").font = H1
     cols = [("ID", 9), ("Title", 52), ("First Author", 18), ("Year", 7), ("Venue", 22),
             ("Venue Type", 12), ("DOI", 26), ("Source DB(s)", 16), ("OA Status", 11),
             ("Duplicate of", 11), ("Matched Strings", 15), ("T/A Decision", 13),
@@ -319,7 +352,42 @@ def sheet_screening(wb, blank_rows=600):
     dv_oa.add(f"I{r}:I{last}")
 
     ws.cell(row=1, column=12,
-            value="When in doubt at title/abstract stage, KEEP IT IN (workflow S5).").font = SMALL
+            value="When in doubt at title/abstract stage, I keep it in (workflow S5).").font = SMALL
+
+    # Populate from the real corpus. The sheet used to ship as an empty grid,
+    # which meant either transcribing 2,060 records by hand or never using it.
+    # Ordered by screening tier so the strongest candidates are at the top and I
+    # can work down. Blank rows follow for anything I add manually.
+    import csv as _csv
+    src = Path(__file__).resolve().parent / "out" / "screening.csv"
+    if src.exists():
+        order = {"T1": 0, "T2": 1, "T3": 2, "T4": 3, "X": 4}
+        with src.open(encoding="utf-8") as f:
+            recs = sorted(_csv.DictReader(f),
+                          key=lambda x: (order.get(x.get("tier", "T4"), 9),
+                                         -int(x.get("cited_by") or 0)))
+        for rec in recs:
+            auto = rec["decision"] == "auto-exclude"
+            vals = [
+                rec["id"], rec["title"], (rec["authors"].split(";")[0] or "").strip(),
+                rec["year"], rec["venue"], rec["venue_type"], rec["doi"],
+                rec["sources"], rec["oa_status"], rec["merged_from"],
+                rec["matched_strings"],
+                "Exclude" if auto else "",          # T/A decision — mine to fill
+                rec["reason"] if auto else "",
+                "", rec["criterion"] if auto else "",
+                f"[tier {rec.get('tier','')}] {rec['suggestion'] or ''} {rec['flags']}".strip(),
+            ]
+            for j, v in enumerate(vals, start=1):
+                c = ws.cell(row=r, column=j, value=v)
+                c.alignment = TOP; c.font = BODY; c.border = BOX
+                # Auto-excluded rows are greyed: the machine already decided
+                # these on mechanical grounds and I do not need to read them.
+                if auto:
+                    c.fill = PatternFill("solid", fgColor=LIGHT)
+                elif r % 2 == 0:
+                    c.fill = PatternFill("solid", fgColor=BAND)
+            r += 1
     return ws
 
 
@@ -328,7 +396,7 @@ def sheet_screening(wb, blank_rows=600):
 def sheet_extraction(wb, blank_rows=200):
     ws = wb.create_sheet("4. Data Extraction")
     ws.cell(row=1, column=1,
-            value="DATA EXTRACTION — one row per INCLUDED paper. Fill EVERY column; "
+            value="DATA EXTRACTION — one row per paper I include. I fill every column; "
                   "write 'NR' when a paper does not report something.").font = H1
     ws.cell(row=2, column=1,
             value="The pattern of NRs is itself a finding — it is what DEMONSTRATES the "
@@ -363,6 +431,40 @@ def sheet_extraction(wb, blank_rows=200):
     add_list("Healthcare / Caregiving?", "Yes,mentioned only,No")
     add_list("Unimodal Baseline Compared?", "Yes,No,NR")
     add_list("Ethics / Privacy Discussed?", "Yes,No")
+
+    # Seed with the papers I have already read in full and used as evidence in
+    # the Gap Chains sheet. Screening has not run yet, so this is not the final
+    # included set — it is the work already done, so the sheet is not empty while
+    # I screen. Metadata comes from the cached OpenAlex records; the analytical
+    # columns are mine to fill from the full text.
+    seeded = [
+        ("10.1109/ICMCSI67283.2026.11412916",
+         "Mutheeswaran et al. 2026", "read in full — G2, G3, G4, G5"),
+        ("10.3390/s25165066",
+         "Sensors 2025 (Multi-Scale Temporal Fusion)", "nearest paper to my scope — G1"),
+        ("10.1609/aaai.v34i02.5492", "Mittal et al. 2020 (M3ER)", "snowball seed — G6"),
+        ("10.18653/v1/P19-1656", "Tsai et al. 2019 (MulT)", "snowball seed — G6"),
+        ("10.3390/s23125475", "Mamieva et al. 2023", "snowball seed"),
+        ("10.3390/s21144913", "Xie et al. 2021", "snowball seed"),
+        ("10.3390/e25101440", "Lian et al. 2023", "snowball seed — survey"),
+    ]
+    try:
+        from slr.sources import openalex as _oa
+        for i, (doi, cite, note) in enumerate(seeded, start=1):
+            rec = _oa.by_doi(doi)
+            vals = {1: f"EX{i:02d}", 2: cite,
+                    3: rec.title if rec else "", 4: doi,
+                    5: rec.venue if rec else "", 6: rec.venue_type if rec else "",
+                    7: rec.year if rec else "", 8: rec.oa_status if rec else "",
+                    len(P.EXTRACTION_COLUMNS): note}
+            for j in range(1, len(P.EXTRACTION_COLUMNS) + 1):
+                c = ws.cell(row=r, column=j, value=vals.get(j, ""))
+                c.alignment = TOP; c.font = BODY; c.border = BOX
+                c.fill = PatternFill("solid", fgColor=GREEN)
+            r += 1
+    except Exception as e:                      # offline / no cache — leave blank
+        ws.cell(row=r, column=1,
+                value=f"(seed rows unavailable: {e})").font = SMALL
     return ws
 
 
@@ -372,11 +474,12 @@ def sheet_gap_chains(wb, blank_rows=150):
     ws = wb.create_sheet("5. Gap Chains")
     ws.cell(row=1, column=1,
             value="GAP CHAINS — GAP → CAUSE → METHOD → RESEARCH QUESTION. "
-                  "One row per gap, not per paper.").font = H1
+                  "One row per gap I identify, not per paper.").font = H1
     ws.cell(row=2, column=1,
             value="A gap with no RESPONDERS and no STATUS is not yet a gap — it is an "
-                  "assertion. Type (c) scope gaps are the intellectual core: a paper "
-                  "cannot be faulted for not doing what it never set out to do.").font = SMALL
+                  "assertion. Type (c) scope gaps are the intellectual core of my "
+                  "argument: a paper cannot be faulted for not doing what it never "
+                  "set out to do.").font = SMALL
     ws.cell(row=3, column=1,
             value="Green rows = worked example from the falsification test already run "
                   "(Mutheeswaran et al. 2026, DOI 10.1109/icmcsi67283.2026.11412916). "
@@ -404,47 +507,17 @@ def sheet_gap_chains(wb, blank_rows=150):
             ws.add_data_validation(dv)
             dv.add(f"{letter}{r}:{letter}{last}")
 
-    # Seed with the falsification finding, so the sheet opens with a worked example.
+    # Rows come from slr/gaps.py, which is verified against full texts and against
+    # this project's own result files. They were previously hard-coded here, and
+    # one of them asserted "no named dataset" for Mutheeswaran et al. — refuted by
+    # the full text, which names DEAP. Generating from a single source stops the
+    # tracker and the analysis drifting apart.
     seed = [
-        ["G1", "EX-M1", "Mutheeswaran et al. 2026",
-         "No clinical or caregiving validation. Reports a framework for 'smart homes, "
-         "healthcare, and wearable devices' and validates with user-satisfaction studies, "
-         "not patients in care settings.",
-         "c", "scope",
-         "None found — this review's lens, not the paper's remit",
-         "scope",
-         "Clinical/caregiving evaluation with privacy-by-design", "Yes", "RQ4", "none",
-         "Intro §I lists healthcare as one of five application domains — quotable "
-         "evidence of scope, not failure."],
-        ["G2", "EX-M1", "Mutheeswaran et al. 2026",
-         "Third modality requires CONTACT sensors (GSR, heart rate) physically attached "
-         "to the person.",
-         "c", "design choice",
-         "None found for camera-only tri-modal sensing in this setting",
-         "open",
-         "Behavioural/skeletal features from the SAME camera as the facial stream "
-         "(MediaPipe PoseLandmarker) — nothing attached to the patient", "Yes",
-         "RQ2", "RQ3",
-         "This is the sharpest remaining differentiator after RQ3 was partially closed."],
-        ["G3", "EX-M1", "Mutheeswaran et al. 2026",
-         "No named dataset; the reported 90.1% accuracy is unverifiable and "
-         "unreproducible.",
-         "c", "task formulation",
-         "n/a — a reporting deficiency, not a research question others have answered",
-         "open",
-         "Evaluation on named public benchmarks with published splits", "Yes",
-         "RQ1", "none",
-         "QA2 and QA5 both fail. You cannot be scooped by a number nobody can reproduce."],
-        ["G4", "EX-M1", "Mutheeswaran et al. 2026",
-         "No evaluation protocol reported — no train/test separation, cross-validation "
-         "or speaker-independence stated.",
-         "c", "task formulation",
-         "n/a — reporting deficiency",
-         "open",
-         "Speaker-independent k-fold cross-validation with error bars", "Yes",
-         "RQ1", "none",
-         "QA6 fails. Directly serves ReQ5 — and corroborates the measured 55.1% vs "
-         "76-95% literature gap."],
+        [g["id"], g["paper_id"], g["citation"], g["statement"], g["type"], g["cause"],
+         g["responders"], g["status"], g["method"], g["cause_mechanism_match"],
+         g["rq"], g.get("rq2") or "none",
+         f"EVIDENCE: {g['evidence']}\nCAVEAT: {g['caveat']}"]
+        for g in G.GAP_CHAINS
     ]
     for row_vals in seed:
         for j, v in enumerate(row_vals, start=1):
@@ -701,11 +774,11 @@ def sheet_prisma(wb):
 
 def sheet_threats(wb):
     ws = wb.create_sheet("8. Threats to Validity")
-    ws.cell(row=1, column=1, value="THREATS TO VALIDITY").font = H1
+    ws.cell(row=1, column=1, value="THREATS TO VALIDITY — the limits of what I can claim").font = H1
     ws.cell(row=2, column=1,
             value="Required by the method. Acknowledging these is what separates a "
-                  "defensible review from an over-claimed one — and an examiner will "
-                  "ask.").font = SMALL
+                  "defensible review from an over-claimed one, and an examiner will "
+                  "ask me about them.").font = SMALL
     r = header_row(ws, 4, ["ID", "Threat", "Description", "Mitigation"],
                    [7, 26, 58, 58])
     for tid, name, desc, mit in P.THREATS:
