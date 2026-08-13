@@ -145,8 +145,7 @@ def sheet_protocol(wb):
     for q, text in P.REVIEW_QUESTIONS.items():
         r = kv(ws, r, q, text, fill=LIGHT if q in ("ReQ4", "ReQ5") else None)
     r = kv(ws, r, "ReQ4 / ReQ5 highlighted",
-           "These two carry the most original findings: dataset representativeness and "
-           "evaluation protocol. Both map to RQ1.", key_font=SMALL, val_font=SMALL)
+           "Both map to RQ1.", key_font=SMALL, val_font=SMALL)
     r += 1
 
     r = band(ws, r, "RESEARCH QUESTIONS (RQ) — what the THESIS answers experimentally")
@@ -162,7 +161,6 @@ def sheet_protocol(wb):
            "Every gap maps to exactly ONE primary Research Question. A gap that maps to "
            "none means the RQ set is incomplete or the gap is out of scope — resolve it "
            "explicitly, never leave it dangling.")
-    r = kv(ws, r, "Optional tidy", P.REQ_TO_RQ_NOTE, key_font=SMALL, val_font=SMALL)
     r += 1
 
     r = band(ws, r, "SCOPE — fixed before searching")
@@ -179,7 +177,7 @@ def sheet_protocol(wb):
     r += 1
 
     r = band(ws, r, "DATABASES — free, programmatic, reproducible")
-    r = kv(ws, r, "Why not Scopus / WoS / IEEE / ACM?",
+    r = kv(ws, r, "Subscription indexes",
            "No institutional access. Recorded as threat T1, not hedged. Queries here are "
            "executed as inspectable code against open APIs, so the review is exactly "
            "reproducible — which a subscription index does not permit.",
@@ -575,10 +573,10 @@ def sheet_synthesis(wb):
     blocks = [
         ("ReQ1", [("Healthcare/caregiving context (Yes)",
                    f'=COUNTIF({rng("Healthcare / Caregiving?")},"Yes")',
-                   "Low count = the application gap"),
+                   "Papers targeting a care setting"),
                   ("Healthcare mentioned only",
                    f'=COUNTIF({rng("Healthcare / Caregiving?")},"mentioned only")',
-                   "The Mutheeswaran pattern — healthcare as an example domain, not a setting")]),
+                   "Healthcare named as an application domain only")]),
         ("ReQ2", [("Speech + facial",
                    f'=COUNTIF({rng("Modalities Used")},"*speech*facial*")', ""),
                   ("Includes behavioural / skeletal",
@@ -586,14 +584,14 @@ def sheet_synthesis(wb):
                    "Low count supports the three-stream contribution"),
                   ("Includes physiological",
                    f'=COUNTIF({rng("Modalities Used")},"*physiolog*")',
-                   "Contact sensors — the deployability contrast")]),
+                   "Requires body-worn sensors")]),
         ("ReQ3", [("Feature-level (early) fusion",
                    f'=COUNTIF({rng("Fusion Strategy")},"*feature*")', ""),
                   ("Decision-level (late) fusion",
                    f'=COUNTIF({rng("Fusion Strategy")},"*decision*")', ""),
                   ("Cross-modal attention",
                    f'=COUNTIF({rng("Fusion Strategy")},"*attention*")',
-                   "If dominant post-2019, justifies the attention-based approach"),
+                   "By publication year"),
                   ("Tensor-based",
                    f'=COUNTIF({rng("Fusion Strategy")},"*tensor*")', ""),
                   ("Hybrid", f'=COUNTIF({rng("Fusion Strategy")},"*hybrid*")', "")]),
@@ -602,58 +600,57 @@ def sheet_synthesis(wb):
                   ("Uses RAVDESS", f'=COUNTIF({rng("Dataset(s)")},"*RAVDESS*")', ""),
                   ("Uses clinical / patient data",
                    f'=COUNTIF({rng("Dataset(s)")},"*clinic*")',
-                   "THE representativeness finding — expect near zero"),
+                   "Evaluated on a corpus recorded in a care setting"),
                   ("Dataset NOT NAMED",
                    f'=COUNTIF({rng("Dataset(s)")},"NR")',
-                   "Unverifiable results. A QA2 failure and a finding in itself")]),
+                   "Dataset not named (QA2)")]),
         ("ReQ5", [("Speaker-independent evaluation",
                    f'=COUNTIF({rng("Evaluation Protocol")},"speaker-independent")',
-                   "The headline ReQ5 finding"),
+                   "By evaluation protocol reported"),
                   ("LOSO or k-fold SI",
                    f'=COUNTIF({rng("Evaluation Protocol")},"*LOSO*")'
                    f'+COUNTIF({rng("Evaluation Protocol")},"k-fold SI")', ""),
                   ("Random split (speaker-dependent)",
                    f'=COUNTIF({rng("Evaluation Protocol")},"random split")',
-                   "Inflates reported accuracy — the likely explanation for the "
-                   "20-40 point gap against the measured 55.1% baseline"),
+                   "Speaker overlap between train and test"),
                   ("Protocol NOT REPORTED",
                    f'=COUNTIF({rng("Evaluation Protocol")},"NR")',
-                   "QA6 failure. Count is a finding"),
+                   "Evaluation protocol not reported (QA6)"),
                   ("Reports UA/UAR rather than accuracy",
                    f'=COUNTIF({rng("Metric Type")},"UA (UAR)")',
-                   "Accuracy and UAR are NOT comparable on imbalanced data"),
+                   "Reported separately; these metrics are not comparable"),
                   ("Sentiment regression (do NOT pool with emotion)",
                    f'=COUNTIF({rng("Task Type")},"sentiment regression")',
-                   "MulT/MISA/MMIM/Self-MM live here")]),
+                   "By fusion strategy")]),
         ("ReQ6", [("Robustness tested",
                    f'=200-COUNTIF({rng("Robustness Tested")},"No")'
                    f'-COUNTIF({rng("Robustness Tested")},"NR")'
-                   f'-COUNTBLANK({rng("Robustness Tested")})', "Low count = the RQ1 gap"),
+                   f'-COUNTBLANK({rng("Robustness Tested")})', "Robustness condition tested"),
                   ("Claim real-time capability",
                    f'=COUNTIF({rng("Real-Time Capable?")},"*Yes*")', ""),
                   ("Actually report latency (ms)",
                    f'=200-COUNTIF({rng("Latency Reported (ms)")},"NR")'
                    f'-COUNTBLANK({rng("Latency Reported (ms)")})',
-                   "The gap between CLAIMING and MEASURING real-time"),
+                   "Latency claimed vs latency measured"),
                   ("Deployed on edge hardware",
                    f'=200-COUNTIF({rng("Edge Hardware Used")},"none")'
                    f'-COUNTIF({rng("Edge Hardware Used")},"NR")'
-                   f'-COUNTBLANK({rng("Edge Hardware Used")})', "The RQ3 gap"),
+                   f'-COUNTBLANK({rng("Edge Hardware Used")})', "Edge hardware reported"),
                   ("Applied compression",
                    f'=200-COUNTIF({rng("Compression")},"none")'
                    f'-COUNTIF({rng("Compression")},"NR")'
                    f'-COUNTBLANK({rng("Compression")})', ""),
                   ("Ethics / privacy discussed",
                    f'=COUNTIF({rng("Ethics / Privacy Discussed?")},"Yes")',
-                   "The RQ4 gap")]),
+                   "Ethics or privacy discussed")]),
         ("ReQ7", [("Gaps recorded (see sheet 5)",
                    "='5. Gap Chains'!A6", "Count of rows in Gap Chains"),
                   ("OPEN gaps", '=COUNTIF(\'5. Gap Chains\'!H6:H155,"open")',
-                   "These justify the framework"),
+                   "Gap chains recorded"),
                   ("SCOPE gaps", '=COUNTIF(\'5. Gap Chains\'!H6:H155,"scope")',
-                   "Type (c) — the intellectual core"),
+                   "Scope gaps, relative to this review's lens"),
                   ("CLOSED gaps", '=COUNTIF(\'5. Gap Chains\'!H6:H155,"closed")',
-                   "Background and history, not justification")]),
+                   "Status: closed")]),
     ]
 
     for req, rows in blocks:
@@ -788,9 +785,9 @@ def sheet_threats(wb):
         r += 1
     r += 1
     ws.cell(row=r, column=2,
-            value="T1 and T4 are highlighted because they are the two an examiner is "
-                  "most likely to press on: no subscription indexes, and single-reviewer "
-                  "screening with no inter-rater agreement.").font = SMALL
+            value="T1 and T4 are the structural limitations of this review: no "
+                  "subscription indexes, and single-reviewer screening with no "
+                  "inter-rater agreement.").font = SMALL
     return ws
 
 
@@ -807,6 +804,14 @@ def main():
         print(f"  warning: ReQs with no search string (check REQ_EVIDENCE_SOURCE): {unserved}")
 
     wb = Workbook()
+    # Authorship. openpyxl stamps itself as creator otherwise.
+    wb.properties.creator = P.CANDIDATE
+    wb.properties.lastModifiedBy = P.CANDIDATE
+    wb.properties.title = "Systematic Literature Review Tracker"
+    wb.properties.subject = P.TITLE
+    wb.properties.description = (
+        f"SLR protocol v{P.VERSION}, locked {P.PROTOCOL_DATE}. "
+        f"{P.PROGRAMME}. Supervisor: {P.SUPERVISOR}.")
     wb.remove(wb.active)
     sheet_protocol(wb)
     sheet_search_log(wb)

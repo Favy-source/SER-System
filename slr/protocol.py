@@ -564,7 +564,10 @@ THREATS = [
     ("T1", "No subscription indexes",
      "No institutional access to Scopus, Web of Science, IEEE Xplore or ACM DL. No "
      "subscription-index recall baseline can be reported.",
-     "Free sources with wide metadata coverage (OpenAlex indexes IEEE/ACM/Springer/"
+     "A recall check against a subscription index now looks feasible: my supervisor's "
+     "2026 review in Computers was built on Scopus, IEEE Xplore and ScienceDirect, so "
+     "faculty access exists and I can ask to validate this corpus against one of them. "
+     "Until then: free sources with wide metadata coverage (OpenAlex indexes IEEE/ACM/Springer/"
      "Elsevier records). Queries executed as inspectable code, so the review is exactly "
      "reproducible — which a subscription index does not permit."),
     ("T2", "English-language only",
