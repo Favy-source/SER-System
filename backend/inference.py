@@ -32,7 +32,7 @@ class InferenceEngine:
         config_path: str = "config/settings.yaml",
     ):
         with open(config_path) as f:
-            self.cfg = yaml.safe_load(f)
+            disk_cfg = yaml.safe_load(f)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -46,9 +46,14 @@ class InferenceEngine:
         # the UI rather than being silently indistinguishable from a real model.
         self.untrained   = bool(ckpt.get("untrained", False))
 
-        # Architecture comes from the checkpoint's own config, and the feature
-        # type it was trained on, so the LSTM width matches the state dict.
-        model = build_model(self.model_name, ckpt["cfg"], len(UNIFIED), self.feature)
+        # Both architecture AND preprocessing come from the checkpoint's embedded
+        # config, with disk_cfg only filling missing top-level sections. Using
+        # disk_cfg for audio/visual params would cause silent train/serve skew
+        # whenever settings.yaml changes after training.
+        ckpt_cfg = ckpt.get("cfg") or {}
+        self.cfg = {**disk_cfg, **ckpt_cfg}
+
+        model = build_model(self.model_name, self.cfg, len(UNIFIED), self.feature)
         model.load_state_dict(ckpt["model"])
         model.eval()
         self.model = model.to(self.device)

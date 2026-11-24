@@ -28,6 +28,7 @@ from fastapi import (
     FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from src.constants import N_FACE_LANDMARKS
 
@@ -114,7 +115,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
 
 app = FastAPI(
     title="SER System",
@@ -125,10 +126,34 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_credentials=True,
+    # Wildcard '*' + credentials violates the Fetch/CORS spec.
+    allow_credentials=("*" not in _origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024   # 50 MB guard against accidental/abusive uploads
+MIN_SAMPLE_RATE  = 8000
+MAX_SAMPLE_RATE  = 192000
+
+
+def _resolve_checkpoint_path(checkpoint: str) -> Path:
+    """Confine hot-swap checkpoint paths strictly to the configured models/ directory."""
+    model_dir = Path(os.getenv("MODEL_DIR", "models")).resolve()
+    req = Path(checkpoint)
+    if req.is_absolute():
+        candidate = req.resolve()
+    else:
+        # Accept either "models/foo.pt" or bare "foo.pt" inside model_dir.
+        candidate = (Path.cwd() / req).resolve()
+        if not candidate.is_relative_to(model_dir):
+            candidate = (model_dir / req).resolve()
+    if not candidate.is_relative_to(model_dir) or candidate.suffix != ".pt":
+        raise HTTPException(
+            status_code=400,
+            detail="Checkpoint must be a .pt file inside the models/ directory.",
+        )
+    return candidate
 
 
 def _engine() -> InferenceEngine:
@@ -186,8 +211,10 @@ async def predict_audio(file: UploadFile = File(..., description="Audio file (wa
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=422, detail="Empty file.")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file exceeds 50 MB limit.")
     try:
-        result = eng.predict_from_bytes(raw)
+        result = await run_in_threadpool(eng.predict_from_bytes, raw)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not process audio: {exc}")
     return PredictionResult(**result)
@@ -201,8 +228,9 @@ def switch_model(checkpoint: str):
     Example: POST /predict/switch?checkpoint=models/attention_best.pt
     """
     global engine
+    safe_path = _resolve_checkpoint_path(checkpoint)
     cfg = os.getenv("CONFIG_PATH", "config/settings.yaml")
-    new_engine = _load_engine(checkpoint, cfg)
+    new_engine = _load_engine(str(safe_path), cfg)
     if new_engine is None:
         raise HTTPException(status_code=404, detail=f"Checkpoint not found: {checkpoint!r}")
     engine = new_engine
@@ -260,22 +288,31 @@ async def ws_stream(ws: WebSocket):
     except Exception:
         input_sr = 16000
 
+    if not (MIN_SAMPLE_RATE <= input_sr <= MAX_SAMPLE_RATE):
+        await ws.send_json({
+            "type": "error",
+            "payload": {"message": f"Unsupported sample_rate {input_sr} (expected {MIN_SAMPLE_RATE}..{MAX_SAMPLE_RATE})"},
+        })
+        await ws.close(code=1008)
+        return
+
     # Visual is only meaningful for a fusion checkpoint, and only reachable when
     # the client opted into tagged frames — otherwise there is no way to tell a
     # landmark frame from PCM.
     visual_enabled = tagged and want_visual and engine.multimodal
+    window_sec = float(getattr(engine, "_duration", 3.0))
     vbuf = (
         VisualStreamBuffer(max_frames=engine.cfg["visual"]["max_frames"])
         if visual_enabled else None
     )
-    buf = AudioStreamBuffer(engine, input_sr=input_sr, visual=vbuf)
+    buf = AudioStreamBuffer(engine, input_sr=input_sr, window_sec=window_sec, visual=vbuf)
 
     await ws.send_json({
         "type": "ready",
         "payload": {
             "sample_rate": input_sr,
             "model": engine.model_name,
-            "window_sec": 3.0,
+            "window_sec": window_sec,
             "hop_sec": 0.5,
             "tagged_binary": tagged,
             # what the server will actually do, not what was asked for
@@ -312,7 +349,7 @@ async def ws_stream(ws: WebSocket):
                         })
                     continue              # landmarks never trigger inference
 
-                result = buf.push(payload)
+                result = await run_in_threadpool(buf.push, payload)
                 if result is None:
                     continue
                 if "_error" in result:

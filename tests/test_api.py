@@ -190,7 +190,8 @@ def test_switch_model_404_for_missing_ckpt():
     assert r.status_code == 404
 
 
-def test_switch_model_success(client_m, tmp_path):
+def test_switch_model_success(client_m, tmp_path, monkeypatch):
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path))
     new_eng = _make_engine()
     new_eng.model_name = "attention"
     ckpt = tmp_path / "model.pt"
@@ -199,6 +200,19 @@ def test_switch_model_success(client_m, tmp_path):
         r = client_m.post(f"/predict/switch?checkpoint={ckpt}")
     assert r.status_code == 200
     assert r.json()["model"] == "attention"
+
+
+def test_switch_model_rejects_path_traversal(client_m):
+    r = client_m.post("/predict/switch?checkpoint=../../etc/passwd")
+    assert r.status_code == 400
+
+
+def test_ws_rejects_invalid_sample_rate(client_m):
+    with client_m.websocket_connect("/ws/stream") as ws:
+        ws.send_text(json.dumps({"sample_rate": 0}))
+        msg = ws.receive_json()
+    assert msg["type"] == "error"
+    assert "sample_rate" in msg["payload"]["message"]
 
 
 # ── WebSocket /ws/stream ──────────────────────────────────

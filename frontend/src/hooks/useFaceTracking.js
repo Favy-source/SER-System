@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Webcam face-landmark tracking via MediaPipe FaceLandmarker.
@@ -174,6 +174,8 @@ export function useFaceTracking() {
       _cleanup();
     }
   }, [_cleanup]);
+
+  useEffect(() => _cleanup, [_cleanup]);
 
   const stop = useCallback(() => {
     _cleanup();

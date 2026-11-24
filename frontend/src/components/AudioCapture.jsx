@@ -15,8 +15,12 @@ export function AudioCapture({ status, onStart, onStop, onFile, uploading }) {
   const isConnecting = status === 'connecting';
   const busy = isConnecting || uploading;
 
+  const AUDIO_EXT = /\.(wav|flac|ogg|mp3|m4a|webm)$/i;
   const handleFile = (f) => {
-    if (f && f.type.startsWith('audio/')) onFile(f);
+    if (!f) return;
+    if (f.type.startsWith('audio/') || (!f.type && AUDIO_EXT.test(f.name)) || AUDIO_EXT.test(f.name)) {
+      onFile(f);
+    }
   };
 
   return (
@@ -47,7 +51,10 @@ export function AudioCapture({ status, onStart, onStop, onFile, uploading }) {
           ref={inputRef}
           type="file"
           accept="audio/*"
-          onChange={(e) => handleFile(e.target.files[0])}
+          onChange={(e) => {
+            handleFile(e.target.files[0]);
+            e.target.value = '';
+          }}
           disabled={uploading}
         />
         {uploading

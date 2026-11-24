@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const WS_URL  = API_URL.replace(/^http/, 'ws') + '/ws/stream';
@@ -48,12 +48,17 @@ export function useStream() {
     taggedRef.current = false;
   };
 
+  const MAX_WS_BUFFER = 512 * 1024;
+
   /** Forward one frame of RAW landmark coords (Float32Array of n*3). */
   const sendLandmarks = useCallback((flat) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !taggedRef.current) return;
+    if (ws.bufferedAmount > MAX_WS_BUFFER) return;
     ws.send(tagFrame(TAG_LANDMARKS, flat.buffer));
   }, []);
+
+  useEffect(() => _cleanup, []);
 
   // Set from /health. When the server has no websockets/wsproto, /ws/stream
   // answers 404 — which surfaces as a generic connection failure and reads like
@@ -103,6 +108,7 @@ export function useStream() {
 
           const send = (buf) => {
             if (ws.readyState !== WebSocket.OPEN) return;
+            if (ws.bufferedAmount > MAX_WS_BUFFER) return;
             ws.send(taggedRef.current ? tagFrame(TAG_AUDIO, buf) : buf);
           };
 
@@ -161,6 +167,7 @@ export function useStream() {
       // captured at first render (always 'idle'), so the guard never fired and
       // an errored connection was reset to idle on close.
       ws.onclose = () => setStatus(prev => (prev === 'error' ? prev : 'idle'));
+      return true;
 
     } catch (e) {
       const msg = String(e?.message ?? e);
@@ -183,6 +190,7 @@ export function useStream() {
       setError(friendly);
       setStatus('error');
       _cleanup();
+      return false;
     }
   }, []);
 

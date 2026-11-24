@@ -100,12 +100,17 @@ class AudioCNNLSTM(nn.Module):
             nn.Linear(128, num_classes),
         )
 
-    def embed(self, x: torch.Tensor) -> torch.Tensor:
+    def encode_sequence(self, x: torch.Tensor) -> torch.Tensor:
+        """Return pre-pooled temporal features (B, T', 2H) for cross-modal attention."""
         B = x.size(0)
         feat = self.cnn(x)                          # (B, C, F, T')
         _, C, F, T2 = feat.shape
         feat = feat.permute(0, 3, 1, 2).reshape(B, T2, C * F)
         out, _ = self.lstm(feat)                    # (B, T', 2H)
+        return out
+
+    def embed(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.encode_sequence(x)               # (B, T', 2H)
         attn = torch.softmax(out.mean(-1, keepdim=True), dim=1)
         return (out * attn).sum(1)                  # (B, 2H)
 

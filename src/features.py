@@ -1,4 +1,3 @@
-import warnings
 from typing import Optional, Tuple
 
 import numpy as np
@@ -10,8 +9,6 @@ from .constants import (
     N_FACE_LANDMARKS,
     REFINE_LANDMARKS,
 )
-
-warnings.filterwarnings("ignore")
 
 
 # ---------------------------------------------------------------------------

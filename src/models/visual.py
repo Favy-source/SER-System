@@ -32,11 +32,26 @@ class VisualLSTM(nn.Module):
             nn.Linear(128, num_classes),
         )
 
+    def valid_mask(self, x: torch.Tensor) -> torch.Tensor:
+        """(B, T) bool mask: True for real landmark frames, False for zero padding."""
+        return x.abs().sum(dim=-1) > 0
+
+    def encode_sequence(self, x: torch.Tensor) -> torch.Tensor:
+        """Return pre-pooled temporal features (B, T, 2H) with padded frames zeroed."""
+        valid = self.valid_mask(x)                  # (B, T)
+        h = F.relu(self.proj(x))
+        out, _ = self.lstm(h)                       # (B, T, 2H)
+        return out * valid.unsqueeze(-1).to(out.dtype)
+
     def embed(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, T, input_dim)
-        x = F.relu(self.proj(x))
-        out, _ = self.lstm(x)                       # (B, T, 2H)
-        attn = torch.softmax(out.mean(-1, keepdim=True), dim=1)
+        valid = self.valid_mask(x)                  # (B, T)
+        out = self.encode_sequence(x)               # (B, T, 2H)
+        scores = out.mean(-1)                       # (B, T)
+        has_any = valid.any(dim=1, keepdim=True)    # (B, 1)
+        masked = scores.masked_fill(~valid, -1e9)
+        safe = torch.where(has_any, masked, torch.zeros_like(scores))
+        attn = torch.softmax(safe, dim=1).unsqueeze(-1)
         return (out * attn).sum(1)                  # (B, 2H)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

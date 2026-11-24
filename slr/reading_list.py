@@ -154,9 +154,9 @@ def build(tiers):
         w(f"## 1. Read these first — {len(both)} papers reporting both evaluation conditions")
         w("")
         w("Each of these reports speaker-dependent *and* speaker-independent results for "
-          "the same system. The gap between those two numbers is what ReQ5 is about, and "
-          "it is the field-level version of what my own baseline shows at n=1 "
-          "(66% validation, 55% test).")
+          "the same system. The gap between those two numbers is what ReQ5 is about "
+          "(distinct from my own 66% val vs 55% test spread, where both splits were "
+          "speaker-independent and the 11-point gap came from 3-actor fold variance).")
         w("")
         w("Read them with one question: **how far does accuracy fall when speakers are "
           "held out?** Record both numbers.")

@@ -60,6 +60,8 @@ class AudioStreamBuffer:
         Ingest a PCM chunk.  Returns a prediction dict when a full window
         has accumulated and the hop interval has elapsed, otherwise None.
         """
+        if len(chunk) % 4 != 0:
+            return {"_error": f"PCM chunk length {len(chunk)} is not a multiple of 4 bytes"}
         pcm = np.frombuffer(chunk, dtype=np.float32)
         self._buf = np.concatenate([self._buf, pcm])
         self._since_last += len(pcm)
@@ -137,6 +139,11 @@ class VisualStreamBuffer:
 
     def push_bytes(self, chunk: bytes) -> None:
         """Ingest a raw float32 landmark frame: n_landmarks * 3 values."""
+        if len(chunk) % 4 != 0:
+            self._rejected += 1
+            raise ValueError(
+                f"landmark frame length {len(chunk)} bytes is not a multiple of 4 (float32)"
+            )
         flat = np.frombuffer(chunk, dtype=np.float32)
         if flat.size % LANDMARK_COORDS:
             self._rejected += 1

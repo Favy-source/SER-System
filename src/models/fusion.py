@@ -16,6 +16,12 @@ class FeatureLevelFusion(nn.Module):
         super().__init__()
         self.audio = audio_model
         self.visual = visual_model
+        # Strip unused unimodal classifier heads so they do not sit as dead,
+        # zero-gradient parameters inflating parameter counts and checkpoints.
+        if hasattr(self.audio, "head"):
+            self.audio.head = nn.Identity()
+        if hasattr(self.visual, "head"):
+            self.visual.head = nn.Identity()
         self.head = nn.Sequential(
             nn.Linear(audio_model._embed_dim + visual_model._embed_dim, hidden),
             nn.ReLU(inplace=True),
@@ -62,6 +68,10 @@ class CrossModalAttentionFusion(nn.Module):
         super().__init__()
         self.audio = audio_model
         self.visual = visual_model
+        if hasattr(self.audio, "head"):
+            self.audio.head = nn.Identity()
+        if hasattr(self.visual, "head"):
+            self.visual.head = nn.Identity()
         dim = audio_model._embed_dim
 
         self.v_proj = (
@@ -80,15 +90,46 @@ class CrossModalAttentionFusion(nn.Module):
         )
 
     def forward(self, audio: torch.Tensor, visual: torch.Tensor) -> torch.Tensor:
-        a = self.audio.embed(audio).unsqueeze(1)              # (B, 1, D)
-        v = self.v_proj(self.visual.embed(visual)).unsqueeze(1)  # (B, 1, D)
+        """Temporal cross-modal attention over pre-pooled sequences (T_a x T_v)."""
+        a_seq = (
+            self.audio.encode_sequence(audio)
+            if hasattr(self.audio, "encode_sequence")
+            else self.audio.embed(audio).unsqueeze(1)
+        )
+        v_raw = (
+            self.visual.encode_sequence(visual)
+            if hasattr(self.visual, "encode_sequence")
+            else self.visual.embed(visual).unsqueeze(1)
+        )
+        v_seq = self.v_proj(v_raw)
 
-        a_ctx, _ = self.cross_attn_av(a, v, v)
-        v_ctx, _ = self.cross_attn_va(v, a, a)
+        if hasattr(self.visual, "valid_mask"):
+            v_valid = self.visual.valid_mask(visual)          # (B, T_v)
+            v_has_any = v_valid.any(dim=1)                    # (B,)
+            # Mask padded frames only on samples with at least one real frame;
+            # masking every key would yield softmax(-inf) -> NaN.
+            v_key_pad = (~v_valid) & v_has_any.unsqueeze(1)
+        else:
+            v_valid = torch.ones(v_seq.shape[:2], dtype=torch.bool, device=v_seq.device)
+            v_has_any = torch.ones(v_seq.size(0), dtype=torch.bool, device=v_seq.device)
+            v_key_pad = None
 
-        a_out = self.norm_a(a + a_ctx).squeeze(1)
-        v_out = self.norm_v(v + v_ctx).squeeze(1)
-        return self.head(torch.cat([a_out, v_out], dim=-1))
+        a_ctx, _ = self.cross_attn_av(a_seq, v_seq, v_seq, key_padding_mask=v_key_pad)
+        v_ctx, _ = self.cross_attn_va(v_seq, a_seq, a_seq)
+
+        a_out = self.norm_a(a_seq + a_ctx)                    # (B, T_a, D)
+        v_out = self.norm_v(v_seq + v_ctx)                    # (B, T_v, D)
+
+        a_attn = torch.softmax(a_out.mean(-1, keepdim=True), dim=1)
+        a_pool = (a_out * a_attn).sum(1)                      # (B, D)
+
+        v_scores = v_out.mean(-1)
+        v_masked = v_scores.masked_fill(~v_valid, -1e9)
+        v_safe = torch.where(v_has_any.unsqueeze(1), v_masked, torch.zeros_like(v_scores))
+        v_attn = torch.softmax(v_safe, dim=1).unsqueeze(-1)
+        v_pool = (v_out * v_attn).sum(1) * v_has_any.unsqueeze(1).to(v_out.dtype)
+
+        return self.head(torch.cat([a_pool, v_pool], dim=-1))
 
 
 def build_fusion_model(

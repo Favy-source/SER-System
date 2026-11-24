@@ -44,8 +44,8 @@ export default function App() {
   // to the socket; the server normalises them with the same function the
   // training pipeline used.
   const handleStart = useCallback(async () => {
-    await start({ visual: useCamera });
-    if (useCamera && videoRef.current) {
+    const ok = await start({ visual: useCamera });
+    if (ok && useCamera && videoRef.current) {
       await face.start(videoRef.current, sendLandmarks);
     }
   }, [start, useCamera, face, sendLandmarks]);

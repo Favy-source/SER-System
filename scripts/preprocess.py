@@ -49,21 +49,26 @@ def main():
     print("\nExtracting audio features...")
     audio_cfg = cfg["audio"]
     audio_errors = []
+    failed_audio = set()
     for _, row in tqdm(df.iterrows(), total=len(df)):
         stem = Path(row["audio_path"]).stem
-        if (proc / "mel" / f"{stem}.npy").exists():
+        mel_out = proc / "mel" / f"{stem}.npy"
+        mfcc_out = proc / "mfcc" / f"{stem}.npy"
+        if mel_out.exists() and mfcc_out.exists():
             continue
         try:
             feats = extract_audio_features(row["audio_path"], audio_cfg)
-            np.save(proc / "mel"  / f"{stem}.npy", feats["mel"])
-            np.save(proc / "mfcc" / f"{stem}.npy", feats["mfcc"])
+            np.save(mel_out, feats["mel"])
+            np.save(mfcc_out, feats["mfcc"])
         except Exception as exc:
             audio_errors.append((row["audio_path"], str(exc)))
+            failed_audio.add(row["audio_path"])
 
     if audio_errors:
         err_path = proc / "errors_audio.txt"
         err_path.write_text("\n".join(f"{p}: {e}" for p, e in audio_errors))
         print(f"  {len(audio_errors)} audio errors — see {err_path}")
+        df = df[~df["audio_path"].isin(failed_audio)].reset_index(drop=True)
 
     # Visual features (only for samples that have a video path)
     vis_rows = df[df["video_path"].notna()]

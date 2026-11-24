@@ -127,9 +127,20 @@ def test_backward_pass(model_name):
     loss = out.sum()
     loss.backward()
 
-    grad_found = any(p.grad is not None and p.grad.abs().sum() > 0
-                     for p in model.parameters())
-    assert grad_found, f"No gradient flow in {model_name}"
+    missing = [
+        name for name, p in model.named_parameters()
+        if p.requires_grad and (p.grad is None or p.grad.abs().sum().item() == 0)
+    ]
+    assert not missing, f"Zero/missing gradients in {model_name}: {missing}"
+
+    # Verify Q, K, and V projections in cross-modal attention all train
+    if model_name == "attention":
+        for blk in ("cross_attn_av", "cross_attn_va"):
+            g = getattr(model, blk).in_proj_weight.grad
+            d = g.shape[0] // 3
+            assert g[:d].abs().sum().item() > 0, f"{blk} Q projection has zero gradient"
+            assert g[d:2*d].abs().sum().item() > 0, f"{blk} K projection has zero gradient"
+            assert g[2*d:].abs().sum().item() > 0, f"{blk} V projection has zero gradient"
 
 
 # ── Eval mode ─────────────────────────────────────────────

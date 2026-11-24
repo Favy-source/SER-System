@@ -123,16 +123,16 @@ def main():
     print(SUB)
     print(f"  {'strategy':<16}{'total params':>14}{'fusion params':>15}{'head input':>13}")
     print(SUB)
-    backbone = sum(p.numel() for p in models["decision_level"].audio.parameters()) + \
-               sum(p.numel() for p in models["decision_level"].visual.parameters())
     for name, m in models.items():
         total = sum(p.numel() for p in m.parameters())
+        backbone = sum(p.numel() for p in m.audio.parameters()) + \
+                   sum(p.numel() for p in m.visual.parameters())
         fusion_only = total - backbone
         head_in = {"feature_level": "1024", "decision_level": "n/a (logits)", "attention": "1024"}[name]
         print(f"  {name:<16}{total:>14,}{fusion_only:>15,}{head_in:>13}")
     print(SUB)
-    print("  Backbones are identical across all three, so the fusion-params column\n"
-          "  is the honest cost of each strategy.")
+    print("  feature_level and attention strip the unused unimodal classifier heads;\n"
+          "  decision_level retains them because it mixes unimodal logits.")
 
     # ------------------------------------------------------------------
     section("3. HOW MUCH DOES THE VISUAL STREAM MOVE THE OUTPUT?")
@@ -199,30 +199,21 @@ def main():
 """)
 
     # ------------------------------------------------------------------
-    section("5. THE CAVEAT NOBODY MENTIONS ABOUT CROSS-MODAL ATTENTION")
+    section("5. TEMPORAL CROSS-MODAL ATTENTION — sequence alignment")
 
     at = models["attention"]
     with torch.no_grad():
-        a_seq = at.audio.embed(audio).unsqueeze(1)
-        v_seq = at.v_proj(at.visual.embed(visual)).unsqueeze(1)
+        a_seq = at.audio.encode_sequence(audio)
+        v_seq = at.v_proj(at.visual.encode_sequence(visual))
     print(f"""
-  Attention operates on sequences of length {a_seq.shape[1]}:
+  Attention operates on the PRE-pooled temporal sequences:
 
-    audio  query {tuple(a_seq.shape)}
-    visual key   {tuple(v_seq.shape)}
+    audio  sequence  {tuple(a_seq.shape)}
+    visual sequence  {tuple(v_seq.shape)}
 
-  Both embeddings are ALREADY pooled to a single vector before attention runs.
-  With sequence length 1, softmax over a single key is exactly 1.0, so no
-  selection over time happens — a_ctx reduces to a learned linear transform of
-  v, mixed by the residual.
-
-  It still trains and it is still a gated cross-modal projection. But it is not
-  the frame-level alignment the name suggests, and it does not obviously earn
-  its {sum(p.numel() for p in at.parameters()) - backbone:,} extra parameters over feature_level.
-
-  Genuine temporal cross-attention would attend over the PRE-pooled LSTM
-  outputs — (1, {a_cnn.shape[3]}, 512) for audio against (1, {MF}, 512) for visual — which is
-  a worthwhile experiment and would justify the cost.
+  Audio attends across all {v_seq.shape[1]} visual frames (with zero-padded frames masked)
+  and visual attends across all {a_seq.shape[1]} audio steps, before residual LayerNorm
+  and temporal attention pooling. Q, K, and V projections all receive gradients.
 
   v_proj is {type(at.v_proj).__name__} here, because both embeddings are already {at.audio._embed_dim}-d.
 """)

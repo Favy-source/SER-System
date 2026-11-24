@@ -4,11 +4,12 @@ import { EMOTION_COLORS, EMOTION_EMOJIS } from '../constants.js';
 export function Timeline({ history, onReset }) {
   const scrollRef = useRef(null);
 
+  const lastTs = history[history.length - 1]?.ts;
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
     }
-  }, [history.length]);
+  }, [history.length, lastTs]);
 
   return (
     <div>
@@ -33,7 +34,7 @@ export function Timeline({ history, onReset }) {
           <div className="timeline-track">
             {history.map((item, i) => (
               <div
-                key={i}
+                key={item.ts ?? i}
                 className="tl-chip"
                 style={{ background: EMOTION_COLORS[item.emotion] + '33',
                          outline: i === history.length - 1

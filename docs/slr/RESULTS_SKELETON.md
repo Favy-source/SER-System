@@ -163,7 +163,7 @@ Each section states the extraction column that feeds it. A section with no colum
 
 `extraction column: Evaluation Protocol x Best Accuracy (%)`
 
-> If speaker-independent studies report systematically lower accuracy than speaker-dependent ones, that difference is a quantitative contribution — and it is exactly what this project's own baseline shows at the single-study level (66% validation vs 55% test).
+> If speaker-independent studies report systematically lower accuracy than speaker-dependent ones, that difference is a quantitative contribution. Note: this project's own 66% val vs 55% test gap is between TWO speaker-independent 3-actor splits (speaker variance + val-selection bias), NOT speaker overlap — measuring the speaker-dependent vs speaker-independent delta directly requires a matched random-split baseline.
 
 | category | n | % of included | notes |
 |---|---:|---:|---|
