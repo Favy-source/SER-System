@@ -31,10 +31,10 @@ import requests
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache"
 
-# The polite-pool identifier OpenAlex and Crossref ask for. It buys a faster,
-# more reliable rate limit and is the documented, intended use of the parameter.
-# Override with SLR_CONTACT_EMAIL to run this under a different address.
-CONTACT_EMAIL = os.environ.get("SLR_CONTACT_EMAIL", "contact@tryjalla.com")
+# The polite-pool identifier OpenAlex, Crossref, and Unpaywall ask for. It buys
+# a faster, more reliable rate limit. Set SLR_CONTACT_EMAIL in your environment
+# before running live API queries so no personal address is hardcoded in git.
+CONTACT_EMAIL = os.environ.get("SLR_CONTACT_EMAIL", "ser-slr-research@example.org")
 USER_AGENT = f"SER-System-SLR/1.0 (mailto:{CONTACT_EMAIL})"
 
 # Per-host courtesy delay in seconds. Deliberately conservative: this review is

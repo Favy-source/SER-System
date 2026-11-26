@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Iterator, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -223,6 +223,86 @@ def speaker_independent_split(
         df[df["speaker"].isin(val_spk)].reset_index(drop=True),
         df[df["speaker"].isin(test_spk)].reset_index(drop=True),
     )
+
+
+def speaker_independent_kfolds(
+    df: pd.DataFrame,
+    n_splits: int = 5,
+    seed: int = 42,
+) -> Iterator[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+    """Yield (train_df, val_df, test_df) for speaker-disjoint k-fold CV.
+
+    Unique speakers are partitioned evenly into `n_splits` disjoint folds.
+    For fold i:
+        test  = fold[i]
+        val   = fold[(i + 1) % n_splits]   (strictly disjoint from train & test)
+        train = remaining n_splits - 2 folds
+
+    Every speaker appears in the held-out test set exactly once across the
+    k folds, and early stopping never peeks at test speakers.
+    """
+    if n_splits < 3:
+        raise ValueError(f"n_splits must be >= 3 (need train, val, and test folds), got {n_splits}")
+
+    speakers = np.asarray(df["speaker"].unique(), dtype=object)
+    n = len(speakers)
+    if n < n_splits:
+        raise ValueError(f"need at least {n_splits} unique speakers for {n_splits}-fold CV, got {n}")
+
+    rng = np.random.default_rng(seed)
+    rng.shuffle(speakers)
+    folds = [set(chunk.tolist()) for chunk in np.array_split(speakers, n_splits)]
+
+    for i in range(n_splits):
+        val_idx = (i + 1) % n_splits
+        test_spk = folds[i]
+        val_spk = folds[val_idx]
+        train_spk = set().union(*(folds[j] for j in range(n_splits) if j not in (i, val_idx)))
+
+        assert len(train_spk) + len(val_spk) + len(test_spk) == n, "speaker partition lost or duplicated speakers"
+        assert not (train_spk & val_spk) and not (val_spk & test_spk) and not (train_spk & test_spk), (
+            "speaker k-fold splits overlap"
+        )
+
+        yield (
+            df[df["speaker"].isin(train_spk)].reset_index(drop=True),
+            df[df["speaker"].isin(val_spk)].reset_index(drop=True),
+            df[df["speaker"].isin(test_spk)].reset_index(drop=True),
+        )
+
+
+def random_kfolds(
+    df: pd.DataFrame,
+    n_splits: int = 5,
+    seed: int = 42,
+) -> Iterator[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+    """Speaker-DEPENDENT (random clip) k-fold split — ABLATION CONTROL ONLY.
+
+    Allows the same speaker into train, val, and test. Use strictly to measure
+    the speaker-leakage inflation delta against speaker_independent_kfolds (ReQ5);
+    never report these numbers as generalisation accuracy.
+    """
+    if n_splits < 3:
+        raise ValueError(f"n_splits must be >= 3, got {n_splits}")
+    n = len(df)
+    if n < n_splits:
+        raise ValueError(f"need at least {n_splits} samples for {n_splits}-fold CV, got {n}")
+
+    idx = np.arange(n)
+    rng = np.random.default_rng(seed)
+    rng.shuffle(idx)
+    folds = [chunk for chunk in np.array_split(idx, n_splits)]
+
+    for i in range(n_splits):
+        val_idx = (i + 1) % n_splits
+        test_i = folds[i]
+        val_i = folds[val_idx]
+        train_i = np.concatenate([folds[j] for j in range(n_splits) if j not in (i, val_idx)])
+        yield (
+            df.iloc[train_i].reset_index(drop=True),
+            df.iloc[val_i].reset_index(drop=True),
+            df.iloc[test_i].reset_index(drop=True),
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -148,7 +148,16 @@ def sheet_protocol(wb):
            "Both map to RQ1.", key_font=SMALL, val_font=SMALL)
     r += 1
 
-    r = band(ws, r, "RESEARCH QUESTIONS (RQ) — what the THESIS answers experimentally")
+    r = band(ws, r, "MASTER'S SCOPE — 2 Problem Statements, 3 Objectives (v2.1)")
+    for k, text in P.PROBLEM_STATEMENTS.items():
+        r = kv(ws, r, k, text, fill=AMBER)
+    for k, text in P.OBJECTIVES.items():
+        r = kv(ws, r, k, text)
+    for k, text in P.PHD_EXTENSION.items():
+        r = kv(ws, r, k, text, key_font=SMALL, val_font=SMALL)
+    r += 1
+
+    r = band(ws, r, "RESEARCH QUESTIONS (RQ) — what the MASTER'S THESIS answers experimentally")
     for q, text in P.RESEARCH_QUESTIONS.items():
         r = kv(ws, r, q, text)
     r += 1
@@ -488,12 +497,13 @@ def sheet_gap_chains(wb, blank_rows=150):
 
     names = [c[0] for c in P.GAP_CHAIN_COLUMNS]
     last = r + blank_rows - 1
+    rq_opts = ",".join(P.RESEARCH_QUESTIONS.keys())
     for col, opts in (("Gap Type", "a,b,c"),
                       ("Cause", ",".join(P.GAP_CAUSES)),
                       ("Status", "closed,open,scope"),
                       ("Cause<->Mechanism match?", "Yes,No,Partial"),
-                      ("Primary Research Question", "RQ1,RQ2,RQ3,RQ4"),
-                      ("Secondary RQ", "RQ1,RQ2,RQ3,RQ4,none")):
+                      ("Primary Research Question", rq_opts),
+                      ("Secondary RQ", f"{rq_opts},none")):
         if col in names:
             letter = get_column_letter(names.index(col) + 1)
             dv = DataValidation(type="list", formula1=f'"{opts}"', allow_blank=True)
@@ -581,7 +591,7 @@ def sheet_synthesis(wb):
                    f'=COUNTIF({rng("Modalities Used")},"*speech*facial*")', ""),
                   ("Includes behavioural / skeletal",
                    f'=COUNTIF({rng("Modalities Used")},"*behavioural*")',
-                   "Low count supports the three-stream contribution"),
+                   "Maps the third-stream baseline for PhD continuation (PS3)"),
                   ("Includes physiological",
                    f'=COUNTIF({rng("Modalities Used")},"*physiolog*")',
                    "Requires body-worn sensors")]),

@@ -88,26 +88,25 @@ makes cross-corpus training possible at all.
 
 ## Current status
 
-Being explicit about this, because the repository contains a complete pipeline that has not yet been
-run on real data:
+Being explicit about what is measured versus what is still underway:
 
 | Component | Status | Notes |
 |---|---|---|
-| Feature extraction | ✅ Implemented, tested | Audio verified; live landmark path verified; offline video extraction unverified |
+| Feature extraction | ✅ Implemented, tested | Audio verified; live & offline MediaPipe Tasks landmark extraction verified |
 | Dataset parsers | ✅ Implemented, tested | RAVDESS, CREMA-D, MSP-IMPROV |
 | Speaker-independent split | ✅ Implemented, tested | Disjointness + reproducibility asserted |
-| 6 model architectures | ✅ Implemented, tested | Forward shape, gradient flow, determinism |
-| Training harness | ✅ Implemented | Never executed on real data |
-| Evaluation harness | ✅ Implemented | Never executed on real data |
-| FastAPI backend | ✅ Implemented, tested | 37 tests; mocked engine plus real-checkpoint e2e |
-| React front end | ✅ Implemented, verified live | Real mic + real webcam confirmed multimodal in Chrome; no JS unit tests |
-| **Trained checkpoints** | ❌ None | only untrained demo files — see [Try it without training](#try-it-without-training) |
-| **Downloaded corpora** | ❌ None | [`datasets/`](datasets/) is empty |
-| **Reported results** | ❌ None | No accuracy/F1/latency numbers exist yet |
+| 6 model architectures | ✅ Implemented, tested | Temporal cross-attention, masked visual LSTM, every-param gradient check |
+| Training & evaluation harness | ✅ Executed on RAVDESS | `audio_cnn_lstm` trained & evaluated; 5-fold CV + visual/fusion runs next |
+| FastAPI backend | ✅ Implemented, tested | 42 tests; path-confined `/predict/switch`, threadpool inference, WS streaming |
+| React front end | ✅ Implemented, verified live | Real mic + webcam confirmed multimodal in Chrome; Vite production build green |
+| **Downloaded corpora** | 🟡 RAVDESS local | `1,248` mel/mfcc + `1,144/1,248` landmarks processed (gitignored); CREMA-D next |
+| **Trained checkpoints** | 🟡 Audio baseline | `models/audio_cnn_lstm_best.pt` trained; visual & fusion models untrained so far |
+| **Reported results** | 🟡 Audio baseline | **55.1% acc / 0.489 macro-F1** (3 held-out actors, `n=156`), **21.7 ms** CPU forward (`~110–155 ms` e2e); `happy` 8.3% & `sad` 12.5% recall vs `angry`/`fearful`/`disgust` 87.5% |
+| **SLR pipeline (`slr/`)** | 🟡 Retrieved, ready to screen | Protocol v2.1 (2 PS / 3 OB); `2,526` identified → `2,060` unique → `2,029` awaiting manual screening (`T1=277`) |
 
-**Test suite: 176 tests, all passing** (`python3 -m pytest`, ~45 s on CPU with a complete install).
+**Test suite: 336 tests (`315` offline + `21` `-m network` API contract tests)** via `.venv/bin/python -m pytest -m "not network"`.
 
-Because no checkpoint exists, the backend starts in a degraded mode: `/health` reports
+On a fresh clone with no checkpoint present, the backend starts in a degraded mode: `/health` reports
 `model_loaded: false` and the prediction endpoints return **503**. This is intentional — the server
 is designed to boot without a model rather than crash, so the front end can be developed against it.
 
@@ -237,15 +236,29 @@ SER-System/
 │   ├── public/worklets/
 │   │   └── pcm-processor.js    AudioWorkletProcessor — raw PCM tap
 │   └── vite.config.js          dev server on :3000, /api proxy to :8000
-├── tests/                      127 pytest tests
+├── slr/                        executable Systematic Literature Review toolkit (v2.1)
+│   ├── protocol.py             single source of truth: 2 PS, 3 OB, ReQ1–ReQ7, S1–S9
+│   ├── booleanq.py             Boolean parser + OpenAlex/PubMed/arXiv/Crossref translators
+│   ├── pipeline.py             search → dedupe → mechanical auto-screen → PRISMA export
+│   ├── screen_cli.py           interactive human title/abstract screening CLI
+│   ├── falsify.py              conjunction-ladder scope-gap falsification test
+│   ├── gaps.py                 evidence-backed GAP → CAUSE → METHOD → RQ chains
+│   ├── access.py               legal OA resolution (Unpaywall + arXiv exact-title)
+│   ├── build_tracker.py        generates slr/out/SLR_Tracker_v2.xlsx
+│   ├── requirements.txt        SLR & test dependencies
+│   └── sources/                cached API adapters (openalex, crossref, pubmed, arxiv)
+├── tests/                      336 pytest tests (315 offline + 21 network)
 │   ├── conftest.py             synthetic sine-wave fixtures
-│   ├── test_features.py        16 tests
-│   ├── test_datasets.py        22 tests
-│   ├── test_model.py           29 tests
-│   └── test_api.py             20 tests
+│   ├── test_features.py        audio & landmark feature extraction
+│   ├── test_datasets.py        corpus parsers, speaker-disjoint splits, Dataset
+│   ├── test_model.py           all 6 models, shapes, full-parameter gradient flow
+│   ├── test_api.py             REST endpoints, security guards, WebSocket streaming
+│   ├── test_integration.py     cross-stage real-checkpoint & MediaPipe contract tests
+│   └── test_slr_*.py           Boolean parser, dedupe, screening, falsification, live APIs
 ├── docs/                       full documentation — see index below
 │   ├── backend/
-│   └── frontend/
+│   ├── frontend/
+│   └── slr/                    supervisor scope brief, reading list, results skeleton
 ├── datasets/                   corpora (gitignored, empty on clone)
 ├── models/                     checkpoints (gitignored, empty on clone)
 └── notebooks/                  exploratory analysis
@@ -278,7 +291,7 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r backend/requirements.txt
 
-python3 -m pytest                  # expect: 127 passed
+python3 -m pytest -m "not network"  # expect: 315 passed
 uvicorn backend.main:app --reload --port 8000
 ```
 
@@ -403,9 +416,10 @@ python3 scripts/explain_fusion.py
 ```
 
 Walks the real tensors and prints, per strategy: where the two streams meet, the isolated fusion
-parameter cost (527,878 / **2** / 2,367,238), a measured sensitivity check that each strategy actually
-responds to the visual input, what decision-level's two learnable weights mean, and the honest caveat
-that cross-modal attention operates on sequences of length 1.
+parameter cost (with unused unimodal classifier heads stripped from `feature_level` and `attention`),
+a measured sensitivity check that each strategy actually responds to the visual input, what
+decision-level's two learnable weights mean, and how temporal cross-modal attention aligns the
+pre-pooled `(1, 16, 512)` audio and `(1, 75, 512)` visual sequences.
 
 ### Slides
 
@@ -583,9 +597,9 @@ with `num_classes=6`:
 | `audio_cnn` | 4-block 2-D CNN + adaptive avg-pool + MLP | 1,438,694 | `(B,1,128,130)` | 4096 |
 | `audio_cnn_lstm` | 3-block CNN → 2-layer BiLSTM(256) + attention pooling | 6,458,982 | `(B,1,128,130)` | 512 |
 | `visual_lstm` | Linear(1404→256) → 2-layer BiLSTM(256) + attention pooling | 3,055,750 | `(B,75,1404)` | 512 |
-| `feature_level` | Concatenate audio ⊕ visual embeddings → MLP(512) | 10,042,610 | both | — |
+| `feature_level` | Concatenate audio ⊕ visual embeddings → MLP(512) | 9,909,734 | both | — |
 | `decision_level` | Softmax-weighted sum of unimodal logits | 9,514,734 | both | — |
-| `attention` | Bidirectional cross-modal MultiheadAttention (8 heads) | 11,881,970 | both | — |
+| `attention` | Bidirectional temporal cross-modal MultiheadAttention (8 heads) | 11,749,094 | both | — |
 
 **Attention pooling** is shared by both recurrent models: rather than taking the final hidden state,
 the BiLSTM output is weighted by `softmax(mean(out, dim=-1))` over time and summed. Cheap — no extra
@@ -764,17 +778,20 @@ Key-by-key reference: [docs/configuration.md](docs/configuration.md).
 ## Testing
 
 ```bash
-python3 -m pytest                      # all 176
+python3 -m pytest -m "not network"     # 315 offline tests
+python3 -m pytest -m network           # 21 live bibliographic API contract tests (cached)
 python3 -m pytest tests/test_model.py  # one module
 python3 -m pytest -k websocket         # by name
 ```
 
-| Module | Tests | What it pins down |
-|---|---|---|
-| [`test_features.py`](tests/test_features.py) | 16 | Pad/crop symmetry, centre-crop position, resampling, exact feature shapes, normalisation statistics, **no NaNs on pure silence** |
-| [`test_datasets.py`](tests/test_datasets.py) | 22 | Filename grammars per corpus, dropped/`None` labels, speaker prefixes, **split disjointness**, split reproducibility, fraction bounds, zero-fill on missing video |
-| [`test_model.py`](tests/test_model.py) | 29 | Forward shapes for all six models, embedding dims, audio/visual dim agreement, **gradient reaches every parameter**, eval-mode determinism, no NaN outputs, factory correctness, decision weights sum to 1 |
-| [`test_api.py`](tests/test_api.py) | 20 | Every endpoint's success and failure paths, 503 with no model, 422 on empty upload, probabilities sum to 1, checkpoint switching, WebSocket handshake, streaming until a window fills, `reset`, `ping`/`pong` |
+| Module | What it pins down |
+|---|---|
+| [`test_features.py`](tests/test_features.py) | Pad/crop symmetry, centre-crop position, resampling, exact feature shapes, normalisation statistics, **no NaNs on pure silence** |
+| [`test_datasets.py`](tests/test_datasets.py) | Filename grammars per corpus, dropped/`None` labels, speaker prefixes, **split disjointness**, split reproducibility, fraction bounds, zero-fill on missing video |
+| [`test_model.py`](tests/test_model.py) | Forward shapes for all six models, embedding dims, **gradient reaches every trainable parameter (including Q/K/V in cross-attention)**, eval-mode determinism, no NaN outputs, factory correctness, decision weights sum to 1 |
+| [`test_api.py`](tests/test_api.py) | Every endpoint's success and failure paths, 503 with no model, 422 on empty upload, path-traversal guard on `/predict/switch`, invalid `sample_rate` rejection, WebSocket handshake, visual landmark framing, `reset`, `ping`/`pong`, `websockets` runtime check |
+| [`test_integration.py`](tests/test_integration.py) | Real feature extraction → `.npy` → `DataLoader` → `build_model` → checkpoint → `InferenceEngine` → live WebSocket multimodal sensitivity + MediaPipe Tasks extraction |
+| `test_slr_*.py` | Boolean query parser & API translators, 3-pass dedupe, mechanical-only screening invariant (never auto-includes), conjunction-ladder falsification, screening CLI, and live bibliographic API contracts |
 
 Two properties are worth calling out because they encode the project's core correctness claims:
 
@@ -848,8 +865,6 @@ model itself was built from the checkpoint's config.
 - **Three-second fixed window.** Emotional cues spanning longer turns are outside the model's view.
 - **No voice-activity detection.** Silent or non-speech windows are classified anyway, usually as
   whatever class the model treats as its null hypothesis.
-- **`torch.cuda.amp.GradScaler()`** is the deprecated spelling; it works but emits a warning on
-  recent PyTorch. The modern form is `torch.amp.GradScaler("cuda")`.
 - **No JS test suite.** Component and hook behaviour has no automated coverage. Page rendering is
   verified headlessly (0 console errors, 0 failed requests), and the whole visual *protocol* is
   covered by Python tests against the real app — but `useFaceTracking` itself is not unit-tested.
@@ -881,33 +896,27 @@ model itself was built from the checkpoint's config.
 
 ## Roadmap
 
-**Immediate — unblock the pipeline**
+**Immediate — Master's baseline & SLR execution (Protocol v2.1)**
 
-- [x] Fix the MFCC channel dimension and the LSTM width that depended on it
-- [x] Resolve the landmark dimensionality to a single derived constant
-- [x] Fix MSP-IMPROV speaker parsing so the split is genuinely speaker-disjoint
-- [ ] Install `mediapipe` and run `extract_visual_features` against a real video — the one path with
-      no end-to-end coverage
-- [ ] Download corpora and run `preprocess.py` end to end; record the sample counts per class
-- [ ] Train all six architectures under identical conditions and publish the comparison table
-- [ ] Fill in the empty `results/` numbers this README currently cannot report
+- [x] Fix MFCC channel/LSTM-width, landmark single-source constant, MSP-IMPROV speaker parsing
+- [x] Migrate offline visual extraction to MediaPipe Tasks API (`FaceLandmarker`)
+- [x] Upgrade `CrossModalAttentionFusion` to true temporal cross-attention & mask padded visual frames
+- [x] Preprocess RAVDESS audio (`1,248`) and train/evaluate `audio_cnn_lstm` speaker-independent baseline (`55.1%` acc / `0.489` macro-F1)
+- [ ] Finish remaining 2 RAVDESS actors' landmarks (`1,144/1,248` complete)
+- [ ] Run 5-fold speaker-independent CV across `audio_cnn_lstm`, `visual_lstm`, and all 3 fusion strategies
+- [ ] Screen Tier 1 (`277` records) via `python3 -m slr.screen_cli --tier T1` for Scopus Paper #1 (SLR)
 
-**Near term — make the comparison meaningful**
+**Near term — Master's architectural contribution (`OB2` & `OB3`)**
 
-- [ ] Voice-activity detection ahead of the inference window, so silence is not classified
-- [ ] Temporal smoothing over consecutive stream predictions to stop single-window flicker
-- [ ] Confusion analysis per corpus — does cross-corpus training help or just average away?
-- [ ] Ablate the visual stream properly: is `decision_level`'s learned weight actually non-trivial?
-- [ ] Notebooks in `notebooks/` for class balance, feature distributions, and error analysis
+- [ ] Design & benchmark modified hybrid visual architecture (CNN + BiLSTM / attention) with speech as a fixed secondary parameter
+- [ ] Add CREMA-D for cross-corpus validation, plus noise/occlusion robustness & calibration analysis
+- [ ] Voice-activity detection + temporal smoothing over consecutive stream predictions
 
-**Longer term — the actual research question**
+**PhD continuation (`PS3`)**
 
-- [ ] Video ingestion in the streaming path, so fusion models are served as trained
-- [ ] Noise and reverberation augmentation matched to ward acoustics
-- [ ] In-domain Nigerian healthcare speech collection, with ethics review and informed consent
-- [ ] Cross-corpus and cross-lingual transfer evaluation against that in-domain set
-- [ ] Quantisation and ONNX export for deployment on the hardware clinics actually have
-- [ ] Calibration analysis — a confidence score that clinicians can act on must mean something
+- [ ] Embedded Raspberry Pi / IoT edge deployment, quantisation, pruning, and ONNX export
+- [ ] Dedicated speech-branch architectural innovation & in-domain clinical speech collection (with ethics approval)
+- [ ] Behavioural / body-language (posture, gait, gesture) third contactless modality
 
 ---
 

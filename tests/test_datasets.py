@@ -465,3 +465,48 @@ def test_parse_ravdess_finds_video_with_correct_modality(tmp_path):
     assert len(df) == 1
     assert df.iloc[0]["video_path"] is not None, "video was not paired to the audio"
     assert Path(df.iloc[0]["video_path"]).name == "01-01-05-01-02-01-12.mp4"
+
+
+# ── Speaker-independent k-fold CV ─────────────────────────
+
+
+def test_kfolds_every_fold_is_strictly_speaker_disjoint():
+    from src.datasets import speaker_independent_kfolds
+    df = _make_df(24, 4)
+    folds = list(speaker_independent_kfolds(df, n_splits=5, seed=42))
+    assert len(folds) == 5
+
+    seen_test_speakers = []
+    for train, val, test in folds:
+        s_tr, s_va, s_te = set(train["speaker"]), set(val["speaker"]), set(test["speaker"])
+        assert s_tr and s_va and s_te
+        assert s_tr.isdisjoint(s_va)
+        assert s_tr.isdisjoint(s_te)
+        assert s_va.isdisjoint(s_te)
+        assert len(train) + len(val) + len(test) == len(df)
+        seen_test_speakers.extend(s_te)
+
+    # Every speaker is evaluated in the held-out test split exactly once.
+    assert len(seen_test_speakers) == 24
+    assert set(seen_test_speakers) == set(df["speaker"])
+
+
+def test_kfolds_is_reproducible_and_validates_inputs():
+    from src.datasets import speaker_independent_kfolds
+    df = _make_df(15, 3)
+    a = [set(te["speaker"]) for _, _, te in speaker_independent_kfolds(df, n_splits=5, seed=9)]
+    b = [set(te["speaker"]) for _, _, te in speaker_independent_kfolds(df, n_splits=5, seed=9)]
+    assert a == b
+
+    with pytest.raises(ValueError, match="n_splits"):
+        list(speaker_independent_kfolds(df, n_splits=2))
+    with pytest.raises(ValueError, match="unique speakers"):
+        list(speaker_independent_kfolds(_make_df(3, 4), n_splits=5))
+
+
+def test_random_kfolds_covers_every_sample_once():
+    from src.datasets import random_kfolds
+    df = _make_df(10, 6)
+    folds = list(random_kfolds(df, n_splits=5, seed=42))
+    assert len(folds) == 5
+    assert sum(len(te) for _, _, te in folds) == len(df)

@@ -37,6 +37,10 @@ frontend/public/mediapipe/
 # Local, personal, or unpublished content — never committed
 *.local.md
 slr/cache/
+docs/presentation/*.pdf
+docs/presentation/*.docx
+docs/presentation/MMU_Interview_*
+docs/presentation/Nwachukwu*
 
 # OS
 .DS_Store

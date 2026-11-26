@@ -72,12 +72,14 @@ GAP_CHAINS = [
             "method is to aim at it. Note the trap: adding a clinical dataset does NOT "
             "close a scope gap by itself; the evaluation has to reflect the setting."),
         "rq": "RQ1",
-        "rq2": "RQ3, RQ4",
+        "rq2": "RQ3",
         "evidence": (
             "Measured, not asserted. Full 7-clause conjunction returns 0 against a pool "
             "of 1,062 papers; drop 'clinical' -> 1; drop 'compression'+'edge' -> 3. The "
             "ladder is informative because relaxation DOES release papers, so the zero "
-            "reflects the corpus rather than a broken query."),
+            "reflects the corpus rather than a broken query. Under v2.1, Master's scope "
+            "addresses the clinical/privacy/real-time gap (RQ1, RQ3), while embedded "
+            "Raspberry Pi compression is scoped to the PhD continuation (PS3)."),
         "caveat": (
             "Bounded by four databases, 2015-2026, and this clause vocabulary. One "
             "genuine counter-example outweighs the count."),
@@ -160,16 +162,17 @@ GAP_CHAINS = [
             "inherits contact sensing and lab conditions."),
         "status": "scope",
         "method": (
-            "Keep the sensor set to camera and microphone, and take the third stream "
-            "from behaviour (pose/gesture) rather than physiology — contactless by "
-            "construction."),
+            "Keep the Master's sensor set to camera and microphone (contactless by "
+            "construction; facial expression primary, speech secondary), and defer "
+            "behavioural posture/gesture as a third contactless stream to the PhD "
+            "continuation."),
         "cause_mechanism_match": (
             "YES — the cause is a dataset/instrumentation constraint and the method "
             "changes the instrumentation. Caution: this is a scope difference, NOT a "
             "criticism. Contact sensors are a legitimate choice; they are simply "
             "unusable where a person cannot be instrumented."),
         "rq": "RQ2",
-        "rq2": "RQ4",
+        "rq2": "RQ3",
         "evidence": (
             "Full text section 3.2 names DEAP explicitly and lists EEG, GSR, HR and "
             "video with valence-arousal ratings."),
@@ -198,7 +201,7 @@ GAP_CHAINS = [
             "validation either, within a Master's timeframe and without ethics approval. "
             "What it can deliver is evaluation under care-relevant CONDITIONS. Claiming "
             "more than that is the trap."),
-        "rq": "RQ4",
+        "rq": "RQ3",
         "rq2": "RQ1",
         "evidence": "Full text Table V and the paragraph following it.",
         "caveat": (

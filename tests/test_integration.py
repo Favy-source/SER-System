@@ -762,3 +762,54 @@ def test_extract_visual_features_raises_when_model_missing(tmp_path, monkeypatch
     monkeypatch.setattr(F, "face_landmarker_model_path", lambda: None)
     with pytest.raises(FileNotFoundError, match="face_landmarker.task"):
         F.extract_visual_features(str(video))
+
+
+# ── Cross-validation harness end-to-end smoke test ────────
+
+
+def test_cross_validate_decision_level_3fold_smoke_and_resume(tmp_path):
+    """Exercise the real k-fold CV pipeline end-to-end on synthetic features."""
+    import copy
+    import json
+    from scripts.cross_validate import run_cv
+
+    proc = tmp_path / "proc"
+    res_dir = tmp_path / "results"
+    df = _build_processed_dir(proc, "mel", n=6, with_video=True)
+    # _build_processed_dir creates 6 distinct speakers -> valid for 3-fold SI CV
+    small_cfg = copy.deepcopy(CFG)
+    small_cfg["training"] = {
+        **CFG["training"],
+        "batch_size": 2,
+        "epochs": 1,
+        "early_stopping_patience": 1,
+        "num_workers": 0,
+        "pin_memory": False,
+        "amp": False,
+    }
+    small_cfg["model"]["audio_cnn_lstm"]["cnn_channels"] = [8, 16, 16]
+    small_cfg["model"]["audio_cnn_lstm"]["lstm_hidden"] = 16
+    small_cfg["model"]["audio_cnn_lstm"]["lstm_layers"] = 1
+    small_cfg["model"]["visual_lstm"]["hidden_dim"] = 16
+    small_cfg["model"]["visual_lstm"]["num_layers"] = 1
+
+    summary = run_cv(
+        df, "decision_level", small_cfg, proc, res_dir,
+        n_splits=3, only_with_video=True, epochs=1, resume=False,
+    )
+    assert summary["n_splits"] == 3
+    assert summary["n_total_oof"] == 6
+    assert "decision_weights" in summary
+    assert abs(summary["decision_weights"]["audio_mean"] + summary["decision_weights"]["visual_mean"] - 1.0) < 1e-3
+    assert set(summary["per_class"].keys()) == set(UNIFIED)
+    assert (res_dir / "cv_decision_level_av_3fold.json").exists()
+    assert (res_dir / "cv_decision_level_av_3fold_confusion.png").exists()
+
+    # Resuming must return identical metrics without retraining.
+    resumed = run_cv(
+        df, "decision_level", small_cfg, proc, res_dir,
+        n_splits=3, only_with_video=True, epochs=1, resume=True,
+    )
+    assert resumed["accuracy_mean"] == summary["accuracy_mean"]
+    assert resumed["f1_macro_mean"] == summary["f1_macro_mean"]
+    assert json.loads((res_dir / "cv_decision_level_av_3fold.json").read_text())["n_total_oof"] == 6

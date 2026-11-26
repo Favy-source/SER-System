@@ -5,26 +5,26 @@ Every other module in slr/ and the generated tracker read from here. Nothing is
 restated by hand, so the protocol cannot drift from the tooling that executes it.
 
 TERMINOLOGY, used consistently across this package:
+  Problem Statement (PS1..PS2)    MMU Master's scope (2 PS; PS3 deferred to PhD).
+  Objective         (OB1..OB3)    MMU Master's scope (3 objectives).
   Review Question   (ReQ1..ReQ7)  what the SLR asks of the LITERATURE.
                                   Descriptive and analytical, never
                                   hypothesis-testing.
-  Research Question (RQ1..RQ4)    what the THESIS answers experimentally.
-
-The handwritten notebook is the authority. Where the typed proposal differs, the
-notebook wins.
+  Research Question (RQ1..RQ3)    what the MASTER'S THESIS answers experimentally.
 
 Standards, deliberately kept apart:
   Kitchenham & Charters (2007)  governs how the review is CONDUCTED
   PRISMA 2020                   governs how the review is REPORTED
 """
 
-VERSION = "2.0"
-PROTOCOL_DATE = "2026-08-10"
+VERSION = "2.1"
+PROTOCOL_DATE = "2026-11-24"
+INITIAL_LOCK_DATE = "2026-08-10"
 
-TITLE = ("Real-Time Multimodal Speech and Facial Emotion Recognition "
+TITLE = ("Real-Time Facial and Speech Emotion Recognition "
          "for Healthcare and Caregiving Support")
 CANDIDATE = "Nwachukwu Chinemerem Favour"
-PROGRAMME = "MMU Master of Computing (by Research) — application P2602387"
+PROGRAMME = "MMU Master of Computing (by Research)"
 SUPERVISOR = "Assoc. Prof. Ts. Dr. R. Kanesaraj Ramasamy"
 CO_SUPERVISOR = "Assoc. Prof. Dr. Wan Noorshahida Binti Mohd Isa"
 
@@ -87,46 +87,98 @@ REVIEW_QUESTIONS = {
 
 
 # ---------------------------------------------------------------------------
-# Research Questions — proposal. Answered by the thesis, not by the review.
+# Master's Scope — 2 Problem Statements, 3 Objectives (per supervisor guidance)
+# ---------------------------------------------------------------------------
+# Refined after supervisor consultation (see Amendment A2):
+#   - Primary architectural contribution: modified hybrid deep learning model
+#     on the VISUAL (facial expression) modality (e.g. CNN + BiLSTM / attention).
+#   - Secondary modality: SPEECH retained as a fixed auxiliary parameter (no
+#     separate acoustic-backbone innovation in the Master's phase).
+#   - Deferred to PhD continuation: Raspberry Pi / IoT edge deployment &
+#     compression, independent speech-branch optimisation, and behavioural /
+#     body-language (gait/gesture) integration.
+
+PROBLEM_STATEMENTS = {
+    "PS1": (
+        "Existing facial and audio-visual emotion recognition models report inflated "
+        "accuracy under subject-dependent splits and struggle to generalise across "
+        "unseen subjects, occlusion, and fine-grained valence distinctions — a "
+        "limitation directly observed in this project's speaker-independent audio "
+        "baseline (happy 8% recall, sad 12% recall)."
+    ),
+    "PS2": (
+        "While combining facial and vocal cues improves affect recognition, current "
+        "multimodal systems rely on heavy joint models or raw video/contact sensors "
+        "that lack privacy-by-design safeguards and verified end-to-end real-time "
+        "responsiveness for practical healthcare and caregiving environments."
+    ),
+}
+
+OBJECTIVES = {
+    "OB1": (
+        "To systematically review facial and audio-visual emotion recognition "
+        "architectures, datasets, evaluation protocols, and healthcare deployment "
+        "gaps under Kitchenham & Charters (2007) and PRISMA 2020 guidelines."
+    ),
+    "OB2": (
+        "To design and develop a modified hybrid visual emotion recognition "
+        "architecture (combining spatial/geometric CNN feature extraction with "
+        "temporal BiLSTM/attention modelling) using privacy-preserving facial "
+        "representations, with speech integrated as a fixed secondary modality."
+    ),
+    "OB3": (
+        "To evaluate the proposed framework rigorously under k-fold "
+        "subject-independent cross-validation, cross-corpus generalisation, "
+        "noise/occlusion robustness, and end-to-end real-time latency in a "
+        "caregiving-oriented prototype."
+    ),
+}
+
+PHD_EXTENSION = {
+    "PS3 (PhD)": (
+        "Resource-constrained IoT / Raspberry Pi edge deployment (quantisation, "
+        "pruning, distillation), dedicated speech-model architectural innovation, "
+        "and behavioural / body-language (posture, gait, gesture) integration."
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# Research Questions — Master's thesis (answered experimentally, not by SLR)
 # ---------------------------------------------------------------------------
 
 RESEARCH_QUESTIONS = {
-    "RQ1": "Can multimodal emotion recognition consistently outperform unimodal "
-           "baselines in realistic healthcare environments, including under conditions "
-           "of noise, occlusion, and speaker variation?",
-    "RQ2": "Which combination of speech, facial, and behavioural features and which "
-           "fusion strategy yields the most accurate and robust emotion classification "
-           "across diverse clinical conditions?",
-    "RQ3": "How can a multimodal affective computing system achieve real-time, "
-           "low-latency inference on resource-constrained or edge devices without "
-           "unacceptable accuracy loss?",
-    "RQ4": "What ethical and privacy-by-design principles must govern the development "
-           "and deployment of emotion-sensing systems in healthcare settings, and how "
-           "should they be operationalised in the framework architecture?",
+    "RQ1": "What architectural, dataset, and evaluation-protocol gaps limit "
+           "subject-independent generalisation and healthcare readiness in current "
+           "facial and audio-visual emotion recognition systems?",
+    "RQ2": "How can a modified hybrid facial emotion recognition architecture "
+           "(CNN + BiLSTM/attention), incorporating speech as a fixed secondary "
+           "parameter, improve subject-independent valence and macro-F1 performance "
+           "over standard unimodal and multimodal baselines?",
+    "RQ3": "To what extent does a privacy-preserving, real-time facial-primary "
+           "affect recognition framework maintain accuracy, robustness (noise and "
+           "occlusion), and end-to-end responsiveness under realistic healthcare "
+           "and caregiving conditions?",
 }
 
 # Review Question -> Research Question. Each gap maps to exactly ONE primary
 # Research Question (M3ER rule); a gap that maps to none means either the RQ set
 # is incomplete or the gap is out of scope — resolve it, never leave it dangling.
-#
-# ReQ4 and ReQ5 land on RQ1 rather than being demoted to "methodology", because
-# RQ1 already contains both clauses they interrogate: "realistic healthcare
-# environments" (representativeness) and "speaker variation" (protocol).
 REQ_TO_RQ = {
     "ReQ1": ["RQ1"],
     "ReQ2": ["RQ2"],
     "ReQ3": ["RQ2"],
-    "ReQ4": ["RQ1"],   # dataset representativeness -> "realistic environments"
-    "ReQ5": ["RQ1"],   # evaluation protocol        -> "speaker variation"
-    "ReQ6": ["RQ3", "RQ4"],
-    "ReQ7": ["RQ1", "RQ2", "RQ3", "RQ4"],   # synthesis; feeds all four
+    "ReQ4": ["RQ1"],   # dataset representativeness -> healthcare readiness
+    "ReQ5": ["RQ1"],   # evaluation protocol        -> subject-independent generalisation
+    "ReQ6": ["RQ3"],   # real-time, robustness, privacy, ethics (RPi/IoT noted as PhD)
+    "ReQ7": ["RQ1", "RQ2", "RQ3"],   # synthesis; feeds all three Master's RQs
 }
 
 REQ_TO_RQ_NOTE = (
-    "ReQ6 spans RQ3 and RQ4. Optional tidy: split into ReQ6a "
-    "(deployment/efficiency/robustness -> RQ3) and ReQ6b "
-    "(privacy/ethics/interpretability -> RQ4) so every gap maps to exactly one "
-    "Research Question without ambiguity."
+    "In v2.1, ReQ1-ReQ6 each map cleanly to a single Master's Research Question "
+    "(RQ1..RQ3), aligning 1:1 with the 2 Problem Statements and 3 Objectives. "
+    "Edge hardware compression (Raspberry Pi / IoT) extracted under ReQ6 is "
+    "retained in the SLR synthesis to inform the PhD continuation (PS3)."
 )
 
 
@@ -505,7 +557,7 @@ GAP_CHAIN_COLUMNS = [
     ("Status",                  12, "closed / open / scope"),
     ("Best-Suited Method",      32, "cause-to-mechanism match"),
     ("Cause<->Mechanism match?", 14, "Yes / No — does the fix attack the CAUSE?"),
-    ("Primary Research Question", 14, "exactly ONE of RQ1..RQ4"),
+    ("Primary Research Question", 14, "exactly ONE of RQ1..RQ3"),
     ("Secondary RQ",            12, "optional"),
     ("Notes",                   30, ""),
 ]
@@ -552,6 +604,34 @@ AMENDMENTS = [
                       "positive, because an over-retrieved paper is discarded at "
                       "screening while a missed one is invisible."),
         "effect_on_prior_work": "None — no screening had been performed.",
+    },
+    {
+        "id": "A2",
+        "date": "2026-11-24",
+        "stage": "post-retrieval, before any manual screening decision (0 rows in decisions.csv)",
+        "target": "Master's thesis scope, Problem Statements (PS1..PS2), Objectives (OB1..OB3), and Research Questions (RQ1..RQ3)",
+        "trigger": ("Supervisory scoping meeting with Assoc. Prof. Ts. Dr. R. Kanesaraj "
+                    "Ramasamy: an 18-month CS Master's by Research requires 2 Problem "
+                    "Statements and 3 Objectives, with architectural modification focused "
+                    "on one primary modality rather than simultaneous innovation across "
+                    "vision, speech, behavioural streams, and embedded IoT hardware."),
+        "cause": ("v2.0 scoped four thesis RQs spanning two-branch model innovation, "
+                  "behavioural sensing, Raspberry Pi edge compression, and clinical ethics "
+                  "— appropriate for a PhD programme rather than an 18-month Master's."),
+        "change": ("Added explicit PROBLEM_STATEMENTS (PS1..PS2), OBJECTIVES (OB1..OB3), "
+                   "and PHD_EXTENSION (PS3); consolidated thesis RESEARCH_QUESTIONS to "
+                   "RQ1..RQ3 with facial expression (modified hybrid CNN+BiLSTM/attention) "
+                   "as the primary architectural contribution and speech retained as a "
+                   "fixed secondary parameter. Deferred Raspberry Pi / IoT deployment, "
+                   "independent speech-branch innovation, and behavioural/body-language "
+                   "streams to the PhD continuation. Kept all 9 search strings (S1..S9) "
+                   "and all 7 Review Questions (ReQ1..ReQ7) unchanged."),
+        "rationale": ("Keeping S1..S9 and ReQ1..ReQ7 unchanged preserves exact "
+                      "reproducibility of the already-retrieved corpus (n=2,526 identified; "
+                      "2,029 awaiting screening) and lets the SLR simultaneously justify "
+                      "the Master's scope (RQ1..RQ3) and map the PhD continuation (PS3)."),
+        "effect_on_prior_work": ("None on retrieval or screening — 0 manual screening "
+                                 "decisions had been recorded when A2 was logged."),
     },
 ]
 

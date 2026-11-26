@@ -1,6 +1,6 @@
 # Results — chapter skeleton
 
-Generated from `slr/protocol.py` v2.0 and `slr/gaps.py`. Re-run `python3 -m slr.results_skeleton` after any protocol change.
+Generated from `slr/protocol.py` v2.1 and `slr/gaps.py`. Re-run `python3 -m slr.results_skeleton` after any protocol change.
 
 **Every table below is empty on purpose.** Filling them requires screening and extraction decisions that are mine to make. A skeleton pre-filled with plausible numbers is the easiest way to end up reporting something nobody counted.
 
@@ -175,7 +175,7 @@ Each section states the extraction column that feeds it. A section with no colum
 
 ## ReQ6. What challenges remain regarding real-time deployment, computational efficiency, robustness, privacy, interpretability and ethical implementation?
 
-*Feeds Research Question(s): **RQ3, RQ4**. Evidence source: search-derived (S2, S3, S4, S5, S7).*
+*Feeds Research Question(s): **RQ3**. Evidence source: search-derived (S2, S3, S4, S5, S7).*
 
 ### Real-time capability and latency
 
@@ -221,7 +221,7 @@ Each section states the extraction column that feeds it. A section with no colum
 
 ## ReQ7. What research gaps should future multimodal emotion recognition systems address for healthcare and caregiving applications?
 
-*Feeds Research Question(s): **RQ1, RQ2, RQ3, RQ4**. Evidence source: synthesis-derived — emerges from the Gap Chains sheet, never searched for directly.*
+*Feeds Research Question(s): **RQ1, RQ2, RQ3**. Evidence source: synthesis-derived — emerges from the Gap Chains sheet, never searched for directly.*
 
 ### Synthesis of gaps
 
@@ -259,5 +259,5 @@ Each section states the extraction column that feeds it. A section with no colum
 | G2 | b | open | Reports 90.1% accuracy and 61.5 ms on a Raspberry Pi 4, but states no evaluation protocol: no train/test split | RQ1 |
 | G3 | b | open | The 61.5 ms figure is described in the conclusion as 'end-to-end inference latency', but the supporting table  | RQ3 |
 | G4 | c | scope | The third modality is physiological (EEG, GSR, heart rate) via the DEAP corpus, which requires body-worn conta | RQ2 |
-| G5 | c | scope | Human evaluation is a 10-participant satisfaction survey (responsiveness, adaptability, comfort, scored out of | RQ4 |
+| G5 | c | scope | Human evaluation is a 10-participant satisfaction survey (responsiveness, adaptability, comfort, scored out of | RQ3 |
 | G6 | a | open | Speaker-independent evaluation collapses on positive and low-arousal valence: angry, fearful and disgust reach | RQ2 |
